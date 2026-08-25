@@ -5,7 +5,9 @@
 #include <sstream>
 #include "ZipWriter.h"
 #include "FolderUtilities.h"
-#include "VirtualFile.h"
+#ifdef LIBRETRO
+	#include "VirtualFile.h"
+#endif
 
 ZipWriter::ZipWriter()
 {
@@ -19,13 +21,18 @@ bool ZipWriter::Initialize(string filename)
 {
 	_zipFilename = filename;
 	memset(&_zipArchive, 0, sizeof(mz_zip_archive));
-	//The archive is built in memory and written out in Save() - miniz's file
-	//API uses stdio directly, which bypasses the frontend VFS
+#ifdef LIBRETRO
+	//miniz's file API goes straight to stdio, which bypasses the frontend VFS -
+	//build the archive in memory and write it out through the stream layer
 	return mz_zip_writer_init_heap(&_zipArchive, 0, 0) != 0;
+#else
+	return mz_zip_writer_init_file(&_zipArchive, _zipFilename.c_str(), 0) != 0;
+#endif
 }
 
 bool ZipWriter::Save()
 {
+#ifdef LIBRETRO
 	void* buffer = nullptr;
 	size_t size = 0;
 	bool result = mz_zip_writer_finalize_heap_archive(&_zipArchive, &buffer, &size) != 0;
@@ -44,10 +51,17 @@ bool ZipWriter::Save()
 	free(buffer);
 	result &= mz_zip_writer_end(&_zipArchive) != 0;
 	return result;
+#else
+	bool result = mz_zip_writer_finalize_archive(&_zipArchive) != 0;
+	result &= mz_zip_writer_end(&_zipArchive) != 0;
+	return result;
+#endif
 }
 
 void ZipWriter::AddFile(string filepath, string zipFilename)
 {
+#ifdef LIBRETRO
+	//Same reason as above: read the file through the VFS-aware stream layer
 	VirtualFile file(filepath);
 	vector<uint8_t> fileData;
 	if(!file.ReadFile(fileData)) {
@@ -55,6 +69,11 @@ void ZipWriter::AddFile(string filepath, string zipFilename)
 		return;
 	}
 	AddFile(fileData, zipFilename);
+#else
+	if(!mz_zip_writer_add_file(&_zipArchive, zipFilename.c_str(), filepath.c_str(), "", 0, MZ_BEST_COMPRESSION)) {
+		std::cout << "mz_zip_writer_add_file() failed!" << std::endl;
+	}
+#endif
 }
 
 void ZipWriter::AddFile(vector<uint8_t>& fileData, string zipFilename)

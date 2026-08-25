@@ -12,7 +12,9 @@ namespace fs = std::experimental::filesystem;
 #include <algorithm>
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/UTF8Util.h"
-#include "Utilities/VfsFile.h"
+#ifdef LIBRETRO
+	#include "Utilities/VfsFile.h"
+#endif
 
 string FolderUtilities::_homeFolder = "";
 string FolderUtilities::_saveFolderOverride = "";
@@ -149,15 +151,18 @@ string FolderUtilities::GetExtension(string filename)
 
 void FolderUtilities::CreateFolder(string folder)
 {
+#ifdef LIBRETRO
 	if(VfsIo::SupportsFolderOps()) {
 		VfsIo::CreateFolder(folder);
 		return;
 	}
+#endif
 
 	std::error_code errorCode;
 	fs::create_directory(fs::u8path(folder), errorCode);
 }
 
+#ifdef LIBRETRO
 //Directory listing through the frontend VFS (used when the frontend provides
 //the v3 interface, since paths may not exist on the real filesystem at all)
 static void GetVfsEntries(string rootFolder, vector<string>& files, vector<string>& folders, const std::unordered_set<string>* extensions, int depth, int maxDepth)
@@ -182,17 +187,20 @@ static void GetVfsEntries(string rootFolder, vector<string>& files, vector<strin
 		}
 	}
 }
+#endif
 
 vector<string> FolderUtilities::GetFolders(string rootFolder)
 {
 	vector<string> folders;
 
+#ifdef LIBRETRO
 	if(VfsIo::SupportsFolderOps()) {
 		vector<string> files;
 		//Prevent excessive recursion (same 2-level limit as the filesystem code below)
 		GetVfsEntries(rootFolder, files, folders, nullptr, 0, 1);
 		return folders;
 	}
+#endif
 
 	std::error_code errorCode;
 	if(!fs::is_directory(fs::u8path(rootFolder), errorCode)) {
@@ -218,11 +226,13 @@ vector<string> FolderUtilities::GetFilesInFolder(string rootFolder, std::unorder
 	vector<string> files;
 	vector<string> folders = { { rootFolder } };
 
+#ifdef LIBRETRO
 	if(VfsIo::SupportsFolderOps()) {
 		vector<string> subFolders;
 		GetVfsEntries(rootFolder, files, subFolders, &extensions, 0, recursive ? maxDepth : 0);
 		return files;
 	}
+#endif
 
 	std::error_code errorCode;
 	if(!fs::is_directory(fs::u8path(rootFolder), errorCode)) {

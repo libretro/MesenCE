@@ -4,7 +4,11 @@
 
 WaveRecorder::WaveRecorder(string outputFile, uint32_t sampleRate, bool isStereo)
 {
+#ifdef LIBRETRO
 	_stream.open(outputFile, ios::out | ios::binary);
+#else
+	_stream = ofstream(outputFile, ios::out | ios::binary);
+#endif
 	_outputFile = outputFile;
 	_streamSize = 0;
 	_sampleRate = sampleRate;

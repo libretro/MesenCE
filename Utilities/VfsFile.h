@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef LIBRETRO
+
 // Frontend VFS support for the libretro build.
 //
 // RetroArch (and other frontends) can hand the core paths that are not real
@@ -91,3 +93,5 @@ private:
 	char* _readBuffer = nullptr;
 	char* _writeBuffer = nullptr;
 };
+
+#endif // LIBRETRO

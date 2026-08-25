@@ -1,13 +1,14 @@
 #include "pch.h"
+
+#ifdef LIBRETRO
+
 #include "Utilities/VfsFile.h"
 #include "Utilities/UTF8Util.h"
 
 #include <algorithm>
 #include <cstring>
 
-#ifdef LIBRETRO
-	#include "Libretro/libretro.h"
-#endif
+#include "Libretro/libretro.h"
 
 #ifdef _MSC_VER
 	#define VfsFseek _fseeki64
@@ -77,7 +78,6 @@ namespace VfsIo
 #endif
 	}
 
-#ifdef LIBRETRO
 	static retro_vfs_interface* _iface = nullptr;
 	static uint32_t _version = 0;
 
@@ -196,18 +196,6 @@ namespace VfsIo
 		_iface->closedir(dir);
 		return true;
 	}
-#else
-	void SetInterface(retro_vfs_interface*, uint32_t) {}
-	bool IsAvailable() { return false; }
-	bool SupportsFolderOps() { return false; }
-	bool IsFolder(const std::string&) { return false; }
-	bool CreateFolder(const std::string&) { return false; }
-	bool ReadFolder(const std::string&, std::vector<DirEntry>&) { return false; }
-	bool Exists(const std::string& path) { return ProbeExists(path); }
-	int64_t GetSize(const std::string& path) { return ProbeSize(path); }
-	bool Remove(const std::string& path) { return StdioRemove(path); }
-	bool Rename(const std::string& oldPath, const std::string& newPath) { return StdioRename(oldPath, newPath); }
-#endif
 }
 
 VfsStreamBuf::VfsStreamBuf()
@@ -235,7 +223,6 @@ bool VfsStreamBuf::open(const std::string& path, std::ios_base::openmode mode)
 	//Same defaults as std::filebuf: writing without reading truncates unless appending
 	bool truncate = !append && write && (!read || (mode & std::ios_base::trunc) != 0);
 
-#ifdef LIBRETRO
 	if(VfsIo::IsAvailable()) {
 		unsigned access = 0;
 		if(read) {
@@ -257,7 +244,6 @@ bool VfsStreamBuf::open(const std::string& path, std::ios_base::openmode mode)
 			return false;
 		}
 	}
-#endif
 
 	if(!_handle) {
 		const char* fileMode;
@@ -297,14 +283,12 @@ bool VfsStreamBuf::close()
 		success = FlushWriteBuffer();
 	}
 
-#ifdef LIBRETRO
 	if(_handle) {
 		if(VfsIo::_iface->close((retro_vfs_file_handle*)_handle) != 0) {
 			success = false;
 		}
 		_handle = nullptr;
 	}
-#endif
 
 	if(_file) {
 		if(std::fclose(_file) != 0) {
@@ -333,11 +317,9 @@ int64_t VfsStreamBuf::ReadRaw(char* data, int64_t count)
 	int64_t total = 0;
 	while(total < count) {
 		int64_t read = -1;
-#ifdef LIBRETRO
 		if(_handle) {
 			read = VfsIo::_iface->read((retro_vfs_file_handle*)_handle, data + total, (uint64_t)(count - total));
 		} else
-#endif
 		if(_file) {
 			read = (int64_t)std::fread(data + total, 1, (size_t)(count - total), _file);
 		}
@@ -355,11 +337,9 @@ int64_t VfsStreamBuf::WriteRaw(const char* data, int64_t count)
 	int64_t total = 0;
 	while(total < count) {
 		int64_t written = -1;
-#ifdef LIBRETRO
 		if(_handle) {
 			written = VfsIo::_iface->write((retro_vfs_file_handle*)_handle, data + total, (uint64_t)(count - total));
 		} else
-#endif
 		if(_file) {
 			written = (int64_t)std::fwrite(data + total, 1, (size_t)(count - total), _file);
 		}
@@ -374,7 +354,6 @@ int64_t VfsStreamBuf::WriteRaw(const char* data, int64_t count)
 
 int64_t VfsStreamBuf::SeekRaw(int64_t offset, int whence)
 {
-#ifdef LIBRETRO
 	if(_handle) {
 		int vfsWhence;
 		switch(whence) {
@@ -391,7 +370,6 @@ int64_t VfsStreamBuf::SeekRaw(int64_t offset, int whence)
 		}
 		return VfsIo::_iface->tell((retro_vfs_file_handle*)_handle);
 	}
-#endif
 	if(_file) {
 		if(VfsFseek(_file, offset, whence) != 0) {
 			return -1;
@@ -403,11 +381,9 @@ int64_t VfsStreamBuf::SeekRaw(int64_t offset, int whence)
 
 int64_t VfsStreamBuf::TellRaw()
 {
-#ifdef LIBRETRO
 	if(_handle) {
 		return VfsIo::_iface->tell((retro_vfs_file_handle*)_handle);
 	}
-#endif
 	if(_file) {
 		return (int64_t)VfsFtell(_file);
 	}
@@ -481,11 +457,9 @@ int VfsStreamBuf::sync()
 		return -1;
 	}
 
-#ifdef LIBRETRO
 	if(_handle) {
 		return VfsIo::_iface->flush ? VfsIo::_iface->flush((retro_vfs_file_handle*)_handle) : 0;
 	}
-#endif
 	if(_file && _writable) {
 		return std::fflush(_file) == 0 ? 0 : -1;
 	}
@@ -584,3 +558,5 @@ VfsStreamBuf::pos_type VfsStreamBuf::seekpos(pos_type pos, std::ios_base::openmo
 {
 	return seekoff(off_type(pos), std::ios_base::beg, which);
 }
+
+#endif // LIBRETRO

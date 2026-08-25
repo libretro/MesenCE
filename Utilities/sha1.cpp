@@ -322,7 +322,12 @@ std::string SHA1::GetHash(std::istream &stream)
 
 std::string SHA1::GetHash(const std::string &filename)
 {
+#ifdef LIBRETRO
+	//Goes through the frontend VFS - see Utilities/VfsFile.h
 	ifstream stream(filename, std::ios::binary);
+#else
+	std::ifstream stream(filename.c_str(), std::ios::binary);
+#endif
 	SHA1 checksum;
 	checksum.update(stream);
 	return checksum.final();
