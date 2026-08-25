@@ -17,19 +17,26 @@
 	#define VfsFtell ftello
 #endif
 
+//stdio fallback, used when no frontend VFS is available
+static std::FILE* StdioOpen(const std::string& path, const char* mode)
+{
+#ifdef _WIN32
+	std::wstring widePath = utf8::utf8::decode(path);
+	std::wstring wideMode(mode, mode + strlen(mode));
+	#ifdef _MSC_VER
+		//_wfopen is deprecated and the MSVC build treats C4996 as an error
+		std::FILE* file = nullptr;
+		return _wfopen_s(&file, widePath.c_str(), wideMode.c_str()) == 0 ? file : nullptr;
+	#else
+		return _wfopen(widePath.c_str(), wideMode.c_str());
+	#endif
+#else
+	return std::fopen(path.c_str(), mode);
+#endif
+}
+
 namespace VfsIo
 {
-	//Fallbacks used when no frontend VFS is available
-	static std::FILE* StdioOpen(const std::string& path, const char* mode)
-	{
-#ifdef _WIN32
-		std::wstring wideMode(mode, mode + strlen(mode));
-		return _wfopen(utf8::utf8::decode(path).c_str(), wideMode.c_str());
-#else
-		return std::fopen(path.c_str(), mode);
-#endif
-	}
-
 	static bool ProbeExists(const std::string& path)
 	{
 		std::FILE* file = StdioOpen(path, "rb");
@@ -264,12 +271,7 @@ bool VfsStreamBuf::open(const std::string& path, std::ios_base::openmode mode)
 			fileMode = "r+b";
 		}
 
-#ifdef _WIN32
-		std::wstring wideMode(fileMode, fileMode + strlen(fileMode));
-		_file = _wfopen(utf8::utf8::decode(path).c_str(), wideMode.c_str());
-#else
-		_file = std::fopen(path.c_str(), fileMode);
-#endif
+		_file = StdioOpen(path, fileMode);
 		if(!_file) {
 			return false;
 		}
