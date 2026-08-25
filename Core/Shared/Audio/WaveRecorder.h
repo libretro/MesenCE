@@ -3,7 +3,7 @@
 class WaveRecorder
 {
 private:
-	std::ofstream _stream;
+	ofstream _stream;
 	uint32_t _streamSize;
 	uint32_t _sampleRate;
 	bool _isStereo;

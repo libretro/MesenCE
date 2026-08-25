@@ -264,6 +264,7 @@
     <ClInclude Include="Video\IVideoRecorder.h" />
     <ClInclude Include="Video\RawCodec.h" />
     <ClInclude Include="Video\ZmbvCodec.h" />
+    <ClInclude Include="VfsFile.h" />
     <ClInclude Include="VirtualFile.h" />
     <ClInclude Include="xBRZ\config.h" />
     <ClInclude Include="xBRZ\xbrz.h" />
@@ -410,6 +411,7 @@
     <ClCompile Include="Video\CamstudioCodec.cpp" />
     <ClCompile Include="Video\GifRecorder.cpp" />
     <ClCompile Include="Video\ZmbvCodec.cpp" />
+    <ClCompile Include="VfsFile.cpp" />
     <ClCompile Include="VirtualFile.cpp" />
     <ClCompile Include="xBRZ\xbrz.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>

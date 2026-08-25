@@ -4,7 +4,7 @@
 
 WaveRecorder::WaveRecorder(string outputFile, uint32_t sampleRate, bool isStereo)
 {
-	_stream = ofstream(outputFile, ios::out | ios::binary);
+	_stream.open(outputFile, ios::out | ios::binary);
 	_outputFile = outputFile;
 	_streamSize = 0;
 	_sampleRate = sampleRate;

@@ -47,6 +47,8 @@
 #include "../Utilities/FolderUtilities.h"
 #include "../Utilities/HexUtilities.h"
 #include "../Utilities/VirtualFile.h"
+#include "../Utilities/VfsFile.h"
+#include "../Utilities/UTF8Util.h"
 
 #define DEVICE_AUTO               RETRO_DEVICE_JOYPAD
 #define DEVICE_GAMEPAD            RETRO_DEVICE_SUBCLASS(RETRO_DEVICE_JOYPAD, 0)
@@ -88,6 +90,11 @@ static std::shared_ptr<IConsole> _console;
 
 static bool FolderExists(const string& folder)
 {
+	if(VfsIo::SupportsFolderOps()) {
+		//The path may not exist on the real filesystem (e.g. Android SAF)
+		return VfsIo::IsFolder(folder);
+	}
+
 #ifdef HAS_STD_FILESYSTEM
 	return fs::exists(folder) && fs::is_directory(folder);
 #else
@@ -138,20 +145,20 @@ static bool CreatePceFirmwareStub(const string& systemFolder, string& createdPat
 		if(targetFile.IsValid()) {
 			backupPath = target + ".libretro.bak";
 			int backupIndex = 1;
-			while(std::ifstream(backupPath, std::ios::binary).good()) {
+			while(utf8::ifstream(backupPath, std::ios::binary).good()) {
 				backupPath = target + ".libretro.bak" + std::to_string(backupIndex);
 				backupIndex++;
 			}
-			if(std::rename(target.c_str(), backupPath.c_str()) != 0) {
+			if(!VfsIo::Rename(target, backupPath)) {
 				backupPath.clear();
 				break;
 			}
 		}
 
-		std::ofstream out(target, std::ios::binary | std::ios::trunc);
+		utf8::ofstream out(target, std::ios::binary | std::ios::trunc);
 		if(!out) {
 			if(!backupPath.empty()) {
-				std::rename(backupPath.c_str(), target.c_str());
+				VfsIo::Rename(backupPath, target);
 			}
 			continue;
 		}
@@ -166,7 +173,7 @@ static bool CreatePceFirmwareStub(const string& systemFolder, string& createdPat
 		}
 
 		if(!backupPath.empty()) {
-			std::rename(backupPath.c_str(), target.c_str());
+			VfsIo::Rename(backupPath, target);
 		}
 	}
 
@@ -180,9 +187,9 @@ static void RestorePceFirmwareStub(const string& createdPath, const string& back
 	}
 
 	if(!backupPath.empty()) {
-		std::rename(backupPath.c_str(), createdPath.c_str());
+		VfsIo::Rename(backupPath, createdPath);
 	} else {
-		std::remove(createdPath.c_str());
+		VfsIo::Remove(createdPath);
 	}
 }
 static std::shared_ptr<LibretroKeyManager> _keyManager;
@@ -665,6 +672,23 @@ extern "C" {
 		};
 
 		env_cb(RETRO_ENVIRONMENT_SET_SUBSYSTEM_INFO, (void*)subsystem_infos);
+
+		//Ask the frontend for its VFS interface - required to load content the
+		//core cannot open itself (Android SAF content:// URIs in particular).
+		//v3 is requested so the directory calls (stat/mkdir/opendir) are usable too.
+		static struct retro_vfs_interface_info vfs_iface_info;
+		vfs_iface_info.required_interface_version = 3;
+		vfs_iface_info.iface = nullptr;
+		if(env_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface_info) && vfs_iface_info.iface) {
+			VfsIo::SetInterface(vfs_iface_info.iface, vfs_iface_info.required_interface_version);
+		} else {
+			//Fall back to v2 (file I/O only, no directory calls)
+			vfs_iface_info.required_interface_version = 2;
+			vfs_iface_info.iface = nullptr;
+			if(env_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface_info) && vfs_iface_info.iface) {
+				VfsIo::SetInterface(vfs_iface_info.iface, vfs_iface_info.required_interface_version);
+			}
+		}
 	}
 
 	RETRO_API void retro_set_video_refresh(retro_video_refresh_t sendFrame)
@@ -784,7 +808,7 @@ void libretro_probe_inputs(const char* tag)
 		//Try to load the custom palette from the MesenPalette.pal file
 		string palettePath = FolderUtilities::CombinePath(FolderUtilities::GetHomeFolder(), "MesenPalette.pal");
 		uint8_t fileData[512 * 3] = {};
-		std::ifstream palette(palettePath, std::ios::binary);
+		utf8::ifstream palette(palettePath, std::ios::binary);
 		if(palette) {
 			palette.seekg(0, std::ios::end);
 			std::streamoff fileSize = palette.tellg();
@@ -2208,7 +2232,7 @@ break;
 			return false;
 		}
 
-		std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
+		utf8::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
 		if(!output) {
 			return false;
 		}
@@ -2241,15 +2265,15 @@ break;
 		backupFirmwarePath.clear();
 
 		{
-			std::ifstream existing(firmwarePath, std::ios::binary);
+			utf8::ifstream existing(firmwarePath, std::ios::binary);
 			if(existing.good()) {
 				backupFirmwarePath = firmwarePath + ".libretro.bak";
 				int backupIndex = 1;
-				while(std::ifstream(backupFirmwarePath, std::ios::binary).good()) {
+				while(utf8::ifstream(backupFirmwarePath, std::ios::binary).good()) {
 					backupFirmwarePath = firmwarePath + ".libretro.bak" + std::to_string(backupIndex);
 					backupIndex++;
 				}
-				if(std::rename(firmwarePath.c_str(), backupFirmwarePath.c_str()) != 0) {
+				if(!VfsIo::Rename(firmwarePath, backupFirmwarePath)) {
 					return false;
 				}
 			}
@@ -2258,7 +2282,7 @@ break;
 		if(!writeGameInfoToFile(info, firmwarePath)) {
 			logSgbDebugf("copySgbFirmwareToSystem: failed to write custom firmware to %s", firmwarePath.c_str());
 			if(!backupFirmwarePath.empty()) {
-				std::rename(backupFirmwarePath.c_str(), firmwarePath.c_str());
+				VfsIo::Rename(backupFirmwarePath, firmwarePath);
 			}
 			return false;
 		}
@@ -2275,9 +2299,9 @@ break;
 		}
 
 		if(!backupFirmwarePath.empty()) {
-			std::rename(backupFirmwarePath.c_str(), firmwarePath.c_str());
+			VfsIo::Rename(backupFirmwarePath, firmwarePath);
 		} else {
-			std::remove(firmwarePath.c_str());
+			VfsIo::Remove(firmwarePath);
 		}
 	}
 

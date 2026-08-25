@@ -1,9 +1,11 @@
 #include "pch.h"
 #include <string>
 #include <cstring>
+#include <cstdlib>
 #include <sstream>
 #include "ZipWriter.h"
 #include "FolderUtilities.h"
+#include "VirtualFile.h"
 
 ZipWriter::ZipWriter()
 {
@@ -17,21 +19,42 @@ bool ZipWriter::Initialize(string filename)
 {
 	_zipFilename = filename;
 	memset(&_zipArchive, 0, sizeof(mz_zip_archive));
-	return mz_zip_writer_init_file(&_zipArchive, _zipFilename.c_str(), 0) != 0;
+	//The archive is built in memory and written out in Save() - miniz's file
+	//API uses stdio directly, which bypasses the frontend VFS
+	return mz_zip_writer_init_heap(&_zipArchive, 0, 0) != 0;
 }
 
 bool ZipWriter::Save()
 {
-	bool result = mz_zip_writer_finalize_archive(&_zipArchive) != 0;
+	void* buffer = nullptr;
+	size_t size = 0;
+	bool result = mz_zip_writer_finalize_heap_archive(&_zipArchive, &buffer, &size) != 0;
+
+	if(result) {
+		ofstream file(_zipFilename, std::ios::out | std::ios::binary);
+		if(file) {
+			file.write((char*)buffer, size);
+			file.close();
+			result = file.good();
+		} else {
+			result = false;
+		}
+	}
+
+	free(buffer);
 	result &= mz_zip_writer_end(&_zipArchive) != 0;
 	return result;
 }
 
 void ZipWriter::AddFile(string filepath, string zipFilename)
 {
-	if(!mz_zip_writer_add_file(&_zipArchive, zipFilename.c_str(), filepath.c_str(), "", 0, MZ_BEST_COMPRESSION)) {
+	VirtualFile file(filepath);
+	vector<uint8_t> fileData;
+	if(!file.ReadFile(fileData)) {
 		std::cout << "mz_zip_writer_add_file() failed!" << std::endl;
+		return;
 	}
+	AddFile(fileData, zipFilename);
 }
 
 void ZipWriter::AddFile(vector<uint8_t>& fileData, string zipFilename)

@@ -322,7 +322,7 @@ std::string SHA1::GetHash(std::istream &stream)
 
 std::string SHA1::GetHash(const std::string &filename)
 {
-	std::ifstream stream(filename.c_str(), std::ios::binary);
+	ifstream stream(filename, std::ios::binary);
 	SHA1 checksum;
 	checksum.update(stream);
 	return checksum.final();

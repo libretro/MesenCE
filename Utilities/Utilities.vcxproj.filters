@@ -170,6 +170,7 @@
     <ClInclude Include="Timer.h" />
     <ClInclude Include="UPnPPortMapper.h" />
     <ClInclude Include="UTF8Util.h" />
+    <ClInclude Include="VfsFile.h" />
     <ClInclude Include="VirtualFile.h" />
     <ClInclude Include="CRC32.h" />
     <ClInclude Include="sha1.h" />
@@ -327,6 +328,7 @@
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="UPnPPortMapper.cpp" />
     <ClCompile Include="UTF8Util.cpp" />
+    <ClCompile Include="VfsFile.cpp" />
     <ClCompile Include="VirtualFile.cpp" />
     <ClCompile Include="CRC32.cpp" />
     <ClCompile Include="sha1.cpp" />
