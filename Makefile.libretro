@@ -3,10 +3,17 @@
 
 MESENFLAGS=
 
+#Nintendo Switch: switch_rules points CC/CXX/AR at devkitA64, so it has to be
+#included before any of the toolchain-dependent variables below are evaluated
+ifeq ($(platform),libnx)
+	include $(DEVKITPRO)/libnx/switch_rules
+endif
+
 CXX ?= g++
 CC ?= gcc
 
-USE_GCC ?= $(shell $(CXX) --version | head -1 | grep -qiE 'gcc|g\+\+' && echo true)
+#`c++`/`g++-14`/... all report GCC, so detect clang instead of matching on the name
+USE_GCC ?= $(shell $(CXX) --version | head -1 | grep -qi clang && echo false || echo true)
 
 DEBUG ?= 0
 HAVE_LTO ?= 1
@@ -15,10 +22,32 @@ STATICLINK ?= true
 LINKCHECKUNRESOLVED := -Wl,-z,defs
 
 LINKOPTIONS :=
+LIBS :=
 MESENOS :=
 UNAME_S := $(shell uname -s)
+MACHINE := $(shell $(CXX) -dumpmachine)
 
-ifeq ($(UNAME_S),Linux)
+#The Windows core is cross-compiled from Linux (MXE), so the target triple -
+#not uname - decides whether this is a Windows build
+ifeq ($(platform),libnx)
+	#Nintendo Switch builds a static library that gets linked into RetroArch
+	MESENOS := libnx
+	STATICLIB := mesen2_libretro_libnx.a
+	MESENFLAGS += -DSWITCH=1 -D__SWITCH__ -DHAVE_LIBNX -D_LARGEFILE_SOURCE
+	MESENFLAGS += -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
+	MESENFLAGS += -ffunction-sections -fdata-sections -ftls-model=local-exec
+	MESENFLAGS += -I$(DEVKITPRO)/libnx/include -I$(DEVKITPRO)/portlibs/switch/include
+	HAVE_LTO := 0
+	STATICLINK := false
+	LINKCHECKUNRESOLVED :=
+else ifneq ($(findstring mingw,$(MACHINE)),)
+	MESENOS := windows
+	SHAREDLIB := mesen2_libretro.dll
+	LINKCHECKUNRESOLVED := -Wl,--no-undefined
+	STATICLINK := true
+	LINKOPTIONS += -static
+	LIBS += -lws2_32 -liphlpapi -lole32 -loleaut32 -luuid
+else ifeq ($(UNAME_S),Linux)
 	MESENOS := linux
 	SHAREDLIB := mesen2_libretro.so
 else ifeq ($(UNAME_S),Darwin)
@@ -38,8 +67,6 @@ else ifeq ($(OS),Windows_NT)
 	MESENOS := windows
 	SHAREDLIB := mesen2_libretro.dll
 endif
-
-MACHINE := $(shell $(CXX) -dumpmachine)
 
 ifneq ($(filter x86_64%,$(MACHINE)),)
 	MESENPLATFORM := $(MESENOS)-x64
@@ -95,7 +122,9 @@ UTILOBJ := $(addsuffix .o,$(basename $(UTILSRC)))
 SEVENZIPSRC := $(shell find SevenZip -name '*.c')
 SEVENZIPOBJ := $(SEVENZIPSRC:.c=.o)
 
-LUASRC := $(shell find Lua -name '*.c')
+#unix.c/unixdgram.c/unixstream.c/serial.c are optional luasocket modules that
+#are never registered by the core (and don't build on Windows)
+LUASRC := $(filter-out Lua/unix.c Lua/unixdgram.c Lua/unixstream.c Lua/serial.c,$(shell find Lua -name '*.c'))
 LUAOBJ := $(LUASRC:.c=.o)
 
 ifeq ($(platform),unix)
@@ -107,8 +136,13 @@ libretro: CXXFLAGS += -D LIBRETRO
 
 all: libretro
 
+ifeq ($(platform),libnx)
 libretro: Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
-	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) $(LDFLAGS) -shared -o $(SHAREDLIB) Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) -pthread
+	$(AR) rcs $(STATICLIB) $^
+else
+libretro: Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
+	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) $(LDFLAGS) -shared -o $(SHAREDLIB) Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) -pthread $(LIBS)
+endif
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -122,4 +156,5 @@ clean:
 	rm -f $(SEVENZIPOBJ)
 	rm -f $(LUAOBJ)
 	rm -f $(SHAREDLIB)
+	rm -f $(STATICLIB)
 	rm -f Libretro/libretro.o
