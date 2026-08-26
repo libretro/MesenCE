@@ -25,6 +25,7 @@
 #include <ios>
 #include <streambuf>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 struct retro_vfs_interface;
@@ -53,6 +54,12 @@ namespace VfsIo
 	bool Remove(const std::string& path);
 	bool Rename(const std::string& oldPath, const std::string& newPath);
 	bool ReadFolder(const std::string& path, std::vector<DirEntry>& entries);
+
+	//Entry points used by FolderUtilities - they take over only when the
+	//frontend provides the v3 folder calls, and return false otherwise so the
+	//core keeps using std::filesystem
+	bool CreateFolderIfSupported(const std::string& path);
+	bool GetEntries(const std::string& rootFolder, std::vector<std::string>* files, std::vector<std::string>* folders, const std::unordered_set<std::string>* extensions, int maxDepth);
 }
 
 //streambuf backed by the frontend VFS, with a stdio fallback

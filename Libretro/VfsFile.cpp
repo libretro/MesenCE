@@ -1,9 +1,10 @@
-#include "pch.h"
+#include "Utilities/pch.h"
 
 #ifdef LIBRETRO
 
-#include "Utilities/VfsFile.h"
+#include "Libretro/VfsFile.h"
 #include "Utilities/UTF8Util.h"
+#include "Utilities/FolderUtilities.h"
 
 #include <algorithm>
 #include <cstring>
@@ -194,6 +195,49 @@ namespace VfsIo
 		}
 
 		_iface->closedir(dir);
+		return true;
+	}
+
+	bool CreateFolderIfSupported(const std::string& path)
+	{
+		if(!SupportsFolderOps()) {
+			return false;
+		}
+		CreateFolder(path);
+		return true;
+	}
+
+	static void WalkFolder(const std::string& rootFolder, std::vector<std::string>* files, std::vector<std::string>* folders, const std::unordered_set<std::string>* extensions, int depth, int maxDepth)
+	{
+		std::vector<DirEntry> entries;
+		if(!ReadFolder(rootFolder, entries)) {
+			return;
+		}
+
+		for(DirEntry& entry : entries) {
+			std::string path = FolderUtilities::CombinePath(rootFolder, entry.Name);
+			if(entry.IsFolder) {
+				if(folders) {
+					folders->push_back(path);
+				}
+				if(depth < maxDepth) {
+					WalkFolder(path, files, folders, extensions, depth + 1, maxDepth);
+				}
+			} else if(files) {
+				std::string extension = FolderUtilities::GetExtension(entry.Name);
+				if(!extensions || extensions->empty() || extensions->find(extension) != extensions->end()) {
+					files->push_back(path);
+				}
+			}
+		}
+	}
+
+	bool GetEntries(const std::string& rootFolder, std::vector<std::string>* files, std::vector<std::string>* folders, const std::unordered_set<std::string>* extensions, int maxDepth)
+	{
+		if(!SupportsFolderOps()) {
+			return false;
+		}
+		WalkFolder(rootFolder, files, folders, extensions, 0, maxDepth);
 		return true;
 	}
 }

@@ -7,6 +7,10 @@ class ZipWriter
 private:
 	mz_zip_archive _zipArchive;
 	string _zipFilename;
+	ofstream _zipFile;
+	mz_uint64 _writePosition = 0;
+
+	static size_t WriteCallback(void* opaque, mz_uint64 fileOffset, const void* buffer, size_t size);
 
 public:
 	ZipWriter();

@@ -113,6 +113,9 @@ endif
 CXXFLAGS = -fPIC -Wall --std=c++17 $(MESENFLAGS) -I $(realpath ./) -I $(realpath ./Core) -I $(realpath ./Utilities)
 CFLAGS = -fPIC -Wall $(MESENFLAGS)
 
+LIBRETROSRC := Libretro/libretro.cpp Libretro/VfsFile.cpp
+LIBRETROOBJ := $(LIBRETROSRC:.cpp=.o)
+
 CORESRC := $(shell find Core -name '*.cpp')
 COREOBJ := $(CORESRC:.cpp=.o)
 
@@ -137,11 +140,11 @@ libretro: CXXFLAGS += -D LIBRETRO
 all: libretro
 
 ifeq ($(platform),libnx)
-libretro: Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
+libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
 	$(AR) rcs $(STATICLIB) $^
 else
-libretro: Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
-	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) $(LDFLAGS) -shared -o $(SHAREDLIB) Libretro/libretro.o $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) -pthread $(LIBS)
+libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
+	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) $(LDFLAGS) -shared -o $(SHAREDLIB) $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) -pthread $(LIBS)
 endif
 
 %.o: %.c
@@ -157,4 +160,4 @@ clean:
 	rm -f $(LUAOBJ)
 	rm -f $(SHAREDLIB)
 	rm -f $(STATICLIB)
-	rm -f Libretro/libretro.o
+	rm -f $(LIBRETROOBJ)

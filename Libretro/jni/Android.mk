@@ -10,6 +10,7 @@ UTIL_DIR     := $(ROOT_DIR)/Utilities
 # The source list is derived the same way Makefile.libretro does it, so the
 # Android build never goes stale when files are added or removed.
 SOURCES_CXX := $(LIBRETRO_DIR)/libretro.cpp \
+               $(LIBRETRO_DIR)/VfsFile.cpp \
                $(shell find $(CORE_DIR) -name '*.cpp') \
                $(shell find $(UTIL_DIR) -name '*.cpp')
 

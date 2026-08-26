@@ -6,7 +6,7 @@
 	#include <istream>
 	#include <ostream>
 	#include <string>
-	#include "Utilities/VfsFile.h"
+	#include "Libretro/VfsFile.h"
 #endif
 
 namespace utf8

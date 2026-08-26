@@ -13,7 +13,7 @@ namespace fs = std::experimental::filesystem;
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/UTF8Util.h"
 #ifdef LIBRETRO
-	#include "Utilities/VfsFile.h"
+	#include "Libretro/VfsFile.h"
 #endif
 
 string FolderUtilities::_homeFolder = "";
@@ -152,8 +152,7 @@ string FolderUtilities::GetExtension(string filename)
 void FolderUtilities::CreateFolder(string folder)
 {
 #ifdef LIBRETRO
-	if(VfsIo::SupportsFolderOps()) {
-		VfsIo::CreateFolder(folder);
+	if(VfsIo::CreateFolderIfSupported(folder)) {
 		return;
 	}
 #endif
@@ -162,42 +161,13 @@ void FolderUtilities::CreateFolder(string folder)
 	fs::create_directory(fs::u8path(folder), errorCode);
 }
 
-#ifdef LIBRETRO
-//Directory listing through the frontend VFS (used when the frontend provides
-//the v3 interface, since paths may not exist on the real filesystem at all)
-static void GetVfsEntries(string rootFolder, vector<string>& files, vector<string>& folders, const std::unordered_set<string>* extensions, int depth, int maxDepth)
-{
-	vector<VfsIo::DirEntry> entries;
-	if(!VfsIo::ReadFolder(rootFolder, entries)) {
-		return;
-	}
-
-	for(VfsIo::DirEntry& entry : entries) {
-		string path = FolderUtilities::CombinePath(rootFolder, entry.Name);
-		if(entry.IsFolder) {
-			folders.push_back(path);
-			if(depth < maxDepth) {
-				GetVfsEntries(path, files, folders, extensions, depth + 1, maxDepth);
-			}
-		} else if(extensions) {
-			string extension = FolderUtilities::GetExtension(entry.Name);
-			if(extensions->empty() || extensions->find(extension) != extensions->end()) {
-				files.push_back(path);
-			}
-		}
-	}
-}
-#endif
-
 vector<string> FolderUtilities::GetFolders(string rootFolder)
 {
 	vector<string> folders;
 
 #ifdef LIBRETRO
-	if(VfsIo::SupportsFolderOps()) {
-		vector<string> files;
-		//Prevent excessive recursion (same 2-level limit as the filesystem code below)
-		GetVfsEntries(rootFolder, files, folders, nullptr, 0, 1);
+	//Prevent excessive recursion (same 2-level limit as the filesystem code below)
+	if(VfsIo::GetEntries(rootFolder, nullptr, &folders, nullptr, 1)) {
 		return folders;
 	}
 #endif
@@ -227,9 +197,7 @@ vector<string> FolderUtilities::GetFilesInFolder(string rootFolder, std::unorder
 	vector<string> folders = { { rootFolder } };
 
 #ifdef LIBRETRO
-	if(VfsIo::SupportsFolderOps()) {
-		vector<string> subFolders;
-		GetVfsEntries(rootFolder, files, subFolders, &extensions, 0, recursive ? maxDepth : 0);
+	if(VfsIo::GetEntries(rootFolder, &files, nullptr, &extensions, recursive ? maxDepth : 0)) {
 		return files;
 	}
 #endif

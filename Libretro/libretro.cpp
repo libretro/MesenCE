@@ -47,7 +47,7 @@
 #include "../Utilities/FolderUtilities.h"
 #include "../Utilities/HexUtilities.h"
 #include "../Utilities/VirtualFile.h"
-#include "../Utilities/VfsFile.h"
+#include "VfsFile.h"
 #include "../Utilities/UTF8Util.h"
 
 #define DEVICE_AUTO               RETRO_DEVICE_JOYPAD
