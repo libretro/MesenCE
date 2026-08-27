@@ -33,12 +33,14 @@ ifeq ($(platform),libnx)
 	#Nintendo Switch builds a static library that gets linked into RetroArch
 	MESENOS := libnx
 	STATICLIB := mesen2_libretro_libnx.a
-	#_DEFAULT_SOURCE because the build is --std=c++17, so __STRICT_ANSI__ is
-	#defined and newlib leaves __BSD_VISIBLE/__MISC_VISIBLE at 0: no
-	#<sys/select.h> pulled in by <sys/types.h> and no u_long, both of which
-	#Utilities/Socket.cpp uses. glibc defines it by default whatever the
-	#dialect, which is why only this platform notices.
-	MESENFLAGS += -DSWITCH=1 -D__SWITCH__ -DHAVE_LIBNX -D_LARGEFILE_SOURCE -D_DEFAULT_SOURCE
+	#gnu++17 rather than the global --std=c++17 (CXXFLAGS puts MESENFLAGS after
+	#it, so this wins). __STRICT_ANSI__ is what hurts here, in two places:
+	#newlib keeps __BSD_VISIBLE/__MISC_VISIBLE at 0 without _DEFAULT_SOURCE,
+	#which loses <sys/select.h> and u_long for Utilities/Socket.cpp, and gcc's
+	#own limits.h withholds LLONG_MAX in C++ mode, which sends Lua/luaconf.h
+	#into "#error Compiler does not support 'long long'". glibc targets notice
+	#neither, since glibc turns _DEFAULT_SOURCE on whatever the dialect.
+	MESENFLAGS += -DSWITCH=1 -D__SWITCH__ -DHAVE_LIBNX -D_LARGEFILE_SOURCE -std=gnu++17
 	MESENFLAGS += -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 	MESENFLAGS += -ffunction-sections -fdata-sections -ftls-model=local-exec
 	MESENFLAGS += -I$(DEVKITPRO)/libnx/include -I$(DEVKITPRO)/portlibs/switch/include
