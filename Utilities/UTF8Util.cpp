@@ -44,4 +44,10 @@ namespace utf8
 		return conv.to_bytes(wstr);
 #endif
 	}
+
+#ifdef LIBRETRO
+	//Key functions for the VFS-backed streams - see the comment in UTF8Util.h.
+	ifstream::~ifstream() {}
+	ofstream::~ofstream() {}
+#endif
 }

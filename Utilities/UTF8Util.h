@@ -26,6 +26,14 @@ namespace utf8
 	class ifstream : public std::istream
 	{
 	public:
+		//Out-of-line so this is the class's key function: std::istream inherits
+		//virtually, so deriving from it produces a VTT and construction vtables
+		//alongside the vtable. Left implicit, every translation unit that sees
+		//this header emits its own copy into a .gnu.linkonce comdat, and the
+		//mingw LTO link then rejects them as multiple definitions because the
+		//group keys do not match between objects.
+		~ifstream() override;
+
 		ifstream() : std::istream(nullptr) { rdbuf(&_buf); }
 
 		ifstream(const std::string& path, ios_base::openmode mode = ios_base::in) : std::istream(nullptr)
@@ -59,6 +67,9 @@ namespace utf8
 	class ofstream : public std::ostream
 	{
 	public:
+		//Key function, see utf8::ifstream above.
+		~ofstream() override;
+
 		ofstream() : std::ostream(nullptr) { rdbuf(&_buf); }
 
 		ofstream(const std::string& path, ios_base::openmode mode = ios_base::out) : std::ostream(nullptr)
