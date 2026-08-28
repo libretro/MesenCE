@@ -175,7 +175,7 @@ libretro: CXXFLAGS += -D LIBRETRO
 all: libretro
 
 ifeq ($(platform),libnx)
-libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(UTILOBJ) $(COREOBJ)
+libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
 	$(AR) rcs $(STATICLIB) $^
 else
 libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
