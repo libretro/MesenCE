@@ -1915,7 +1915,10 @@ void libretro_probe_inputs(const char* tag)
 			std::stringstream ss;
 			_emu->Serialize(ss, true, 1);
 			std::string out = ss.str();
-			if(out.size() > size) return false;
+			if(out.size() > size) {
+				logMessage(RETRO_LOG_ERROR, "retro_serialize: serialized state exceeds the frontend buffer.\n");
+				return false;
+			}
 			memcpy(data, out.data(), out.size());
 			return true;
 		} catch(...) {
@@ -2686,8 +2689,8 @@ void libretro_probe_inputs(const char* tag)
 
 			// Compute a safe save state size to report to the frontend
 			std::stringstream ss;
-			_emu->GetSaveStateManager()->SaveState(ss);
-			_saveStateSize = ((ss.str().size() * 2) + 0x400) & ~0x3FF;
+			_emu->Serialize(ss, true, 0);
+			_saveStateSize = ((ss.str().size() + 0x400) & ~0x3FF);
 
 			// Update memory maps (still a stubbed implementation for now)
 			retro_set_memory_maps();
