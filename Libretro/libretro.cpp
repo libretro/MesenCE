@@ -429,67 +429,46 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		if(consoleType == ConsoleType::Snes) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenNtscFilter) || matches(MesenEnablePalBorders) || matches(MesenAudioSampleRate) ||
-				matches(MesenControllerTurboSpeed) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenSpriteLimit) || matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) ||
-				matches(MesenRandomizeCpuPpuAlignment) || matches(MesenFakeStereo) || matches(MesenSnesColorCorrection) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenSnesColorCorrection) ||
 				matches(MesenSnesHighResBlendMode) || matches(MesenSnesDeinterlaceMode) || matches(MesenSnesHideBgLayer1) ||
 				matches(MesenSnesHideBgLayer2) || matches(MesenSnesHideBgLayer3) || matches(MesenSnesHideBgLayer4) ||
-				matches(MesenSnesHideSprites) || matches(MesenSnesRemoveSpriteLimit) || matches(MesenSnesForceFixedResolution) ||
-				matches(MesenSnesDisableFrameSkipping) || matches(MesenSnesEnableStrictBoardMappings) ||
-				matches(MesenSnesRandomizePowerOnState);
+				matches(MesenSnesHideSprites) || matches(MesenSnesRemoveSpriteLimit) ||
+				matches(MesenSnesForceFixedResolution) || matches(MesenSnesDisableFrameSkipping) ||
+				matches(MesenSnesEnableStrictBoardMappings) || matches(MesenSnesRandomizePowerOnState);
 		}
 
 		if(consoleType == ConsoleType::Gameboy) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) || matches(MesenSpriteLimit) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenGameboyModel) || matches(MesenGameboyBlendFrames) ||
-				matches(MesenGameboyAdjustColors) || matches(MesenGameboyDisableBackground) || matches(MesenGameboyDisableSprites) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenGameboyModel) || matches(MesenGameboyBlendFrames) ||
+				matches(MesenGameboyAdjustColors) || matches(MesenGameboyDisableSprites) ||
 				matches(MesenGameboyRemoveSpriteLimit) || matches(MesenGameboyHideSgbBorders);
 		}
 
 		if(consoleType == ConsoleType::Gba) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenGbaSkipBootScreen) || matches(MesenGbaBlendFrames) || matches(MesenGbaAdjustColors) ||
-				matches(MesenGbaDisableSprites) || matches(MesenGbaDisableBackground) || matches(MesenGbaHideBgLayer1) ||
-				matches(MesenGbaHideBgLayer2) || matches(MesenGbaHideBgLayer3) || matches(MesenGbaHideBgLayer4) ||
-				matches(MesenGbaDisableFrameSkipping) || matches(MesenGbaSaveType) || matches(MesenGbaRtcType);
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenGbaSkipBootScreen) || matches(MesenGbaBlendFrames) ||
+				matches(MesenGbaAdjustColors) || matches(MesenGbaDisableSprites) || matches(MesenGbaDisableBackground) ||
+				matches(MesenGbaHideBgLayer1) || matches(MesenGbaHideBgLayer2) || matches(MesenGbaHideBgLayer3) ||
+				matches(MesenGbaHideBgLayer4) || matches(MesenGbaDisableFrameSkipping) || matches(MesenGbaSaveType) ||
+				matches(MesenGbaRtcType);
 		}
 
 		if(consoleType == ConsoleType::PcEngine) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenPceConsoleType) || matches(MesenPceCdRomType) || matches(MesenPceDisableSprites) ||
-				matches(MesenPceDisableSpritesVdc2) || matches(MesenPceDisableBackground) || matches(MesenPceDisableBackgroundVdc2) ||
-				matches(MesenPceRemoveSpriteLimit) || matches(MesenPceDisableFrameSkipping) || matches(MesenPceForceFixedResolution) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenPceConsoleType) || matches(MesenPceCdRomType) ||
+				matches(MesenPceDisableSprites) || matches(MesenPceDisableSpritesVdc2) || matches(MesenPceDisableBackground) ||
+				matches(MesenPceDisableBackgroundVdc2) || matches(MesenPceRemoveSpriteLimit) ||
+				matches(MesenPceDisableFrameSkipping) || matches(MesenPceForceFixedResolution) ||
 				matches(MesenPceUseHuc6280Audio);
 		}
 
 		if(consoleType == ConsoleType::Sms) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenNtscFilter) || matches(MesenSmsUseSgPalette) || matches(MesenSmsGameGearBlendFrames) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenSmsUseSgPalette) || matches(MesenSmsGameGearBlendFrames) ||
 				matches(MesenSmsDisableSprites) || matches(MesenSmsDisableBackground) || matches(MesenSmsRemoveSpriteLimit) ||
 				matches(MesenSmsFmAudio);
 		}
 
 		if(consoleType == ConsoleType::Ws) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenWsModel) || matches(MesenWsAutoRotate) || matches(MesenWsBlendFrames) ||
-				matches(MesenWsLcdAdjustColors) || matches(MesenWsLcdShowIcons) || matches(MesenWsAudioMode) || matches(MesenWsDisableSprites);
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenWsModel) || matches(MesenWsAutoRotate) ||
+				matches(MesenWsBlendFrames) || matches(MesenWsLcdAdjustColors) || matches(MesenWsLcdShowIcons) ||
+				matches(MesenWsAudioMode) || matches(MesenWsDisableSprites);
 		}
 
 		return true;
@@ -553,6 +532,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 	RETRO_API void retro_init()
 	{
+		_audioSampleRate = 44100;
+
 		struct retro_log_callback log;
 		if(env_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log)) {
 			logCallback = log.log;
@@ -663,10 +644,10 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		// Core Options v2: Definitions
 		static const retro_core_option_v2_definition option_defs[] = {
 			// System category
-			{ MesenRegion, "System - Region", "Region", "Select NES region", NULL, "system",
+			{ MesenRegion, "System - Region (restart required)", "Region", "Select NES region", NULL, "system",
 				{{ "Auto", "Auto" }, { "NTSC", "NTSC" }, { "PAL", "PAL" }, { "Dendy", "Dendy" }, { NULL, NULL }},
 				"Auto" },
-			{ MesenRamState, "System - RAM Power-On State", "RAM Power-On State", "Default power-on state for RAM", NULL, "system",
+			{ MesenRamState, "System - RAM Power-On State (restart required)", "RAM Power-On State", "Default power-on state for RAM", NULL, "system",
 				{{ "All 0s (Default)", "All 0s" }, { "All 1s", "All 1s" }, { "Random Values", "Random" }, { NULL, NULL }},
 				"All 0s (Default)" },
 			{ MesenOverclock, "System - Overclock", "Overclock", "Overclock the NES CPU", NULL, "system",
@@ -675,19 +656,19 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenOverclockType, "System - Overclock Type", "Overclock Type", "When to apply overclock", NULL, "system",
 				{{ "Before NMI (Recommended)", "Before NMI" }, { "After NMI", "After NMI" }, { NULL, NULL }},
 				"Before NMI (Recommended)" },
-			{ MesenFdsAutoSelectDisk, "System - FDS Auto Insert Disk", "FDS Auto Insert", "Automatically insert disks on FDS games", NULL, "system",
+			{ MesenFdsAutoSelectDisk, "System - FDS Auto Insert Disk (restart required)", "FDS Auto Insert", "Automatically insert disks on FDS games", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenFdsFastForwardLoad, "System - FDS Fast Forward On Load", "FDS Fast Forward", "Fast forward while FDS is loading", NULL, "system",
+			{ MesenFdsFastForwardLoad, "System - FDS Fast Forward On Load (restart required)", "FDS Fast Forward", "Fast forward while FDS is loading", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 			{ MesenAllowInvalidInput, "System - Allow Invalid Input", "Allow Invalid Input", "Allow invalid input combinations", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenRandomizeMapperPowerOnState, "System - Randomize Mapper Power-On State", "Randomize Mapper Power-On", "Randomize mapper power-on state (for testing)", NULL, "system",
+			{ MesenRandomizeMapperPowerOnState, "System - Randomize Mapper Power-On State (restart required)", "Randomize Mapper Power-On", "Randomize mapper power-on state (for testing)", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenRandomizeCpuPpuAlignment, "System - Randomize CPU/PPU Alignment", "Randomize CPU/PPU Alignment", "Randomize CPU/PPU alignment (for testing)", NULL, "system",
+			{ MesenRandomizeCpuPpuAlignment, "System - Randomize CPU/PPU Alignment (restart required)", "Randomize CPU/PPU Alignment", "Randomize CPU/PPU alignment (for testing)", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 
@@ -778,15 +759,15 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenSnesDisableFrameSkipping, "System - SNES Disable Frame Skipping", "Disable Frame Skipping", "Disable SNES frame skipping", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenSnesEnableStrictBoardMappings, "System - SNES Strict Board Mappings", "Strict Board Mappings", "Use strict SNES board mappings", NULL, "system",
+			{ MesenSnesEnableStrictBoardMappings, "System - SNES Strict Board Mappings (restart required)", "Strict Board Mappings", "Use strict SNES board mappings", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenSnesRandomizePowerOnState, "System - SNES Randomize Power-On State", "Randomize Power-On", "Randomize the SNES power-on state", NULL, "system",
+			{ MesenSnesRandomizePowerOnState, "System - SNES Randomize Power-On State (restart required)", "Randomize Power-On", "Randomize the SNES power-on state", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 
 			// Game Boy options
-			{ MesenGameboyModel, "System - Game Boy Model", "Game Boy Model", "Select the Game Boy model to emulate", NULL, "system",
+			{ MesenGameboyModel, "System - Game Boy Model (restart required)", "Game Boy Model", "Select the Game Boy model to emulate", NULL, "system",
 				{{ "Auto (Best)", "Auto (Best)" }, { "Auto (GBC)", "Auto (GBC)" }, { "Auto (SGB)", "Auto (SGB)" }, { "Auto (GB)", "Auto (GB)" }, { "Game Boy", "Game Boy" }, { "Game Boy Color", "Game Boy Color" }, { "Super Game Boy", "Super Game Boy" }, { NULL, NULL }},
 				"Auto (GBC)" },
 			{ MesenGameboyBlendFrames, "Video - Game Boy Blend Frames", "Blend Frames", "Blend Game Boy frames for a smoother image", NULL, "video",
@@ -809,7 +790,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 				"disabled" },
 
 			// GBA options
-			{ MesenGbaSkipBootScreen, "System - GBA Skip Boot Screen", "Skip Boot Screen", "Skip the GBA boot screen", NULL, "system",
+			{ MesenGbaSkipBootScreen, "System - GBA Skip Boot Screen (restart required)", "Skip Boot Screen", "Skip the GBA boot screen", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 			{ MesenGbaBlendFrames, "Video - GBA Blend Frames", "Blend Frames", "Blend GBA frames", NULL, "video",
@@ -839,18 +820,18 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenGbaDisableFrameSkipping, "System - GBA Disable Frame Skipping", "Disable Frame Skipping", "Disable GBA frame skipping", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenGbaSaveType, "System - GBA Save Type", "Save Type", "Select the GBA save type", NULL, "system",
+			{ MesenGbaSaveType, "System - GBA Save Type (restart required)", "Save Type", "Select the GBA save type", NULL, "system",
 				{{ "Auto Detect", "Auto Detect" }, { "None", "None" }, { "SRAM", "SRAM" }, { "EEPROM 512", "EEPROM 512" }, { "EEPROM 8192", "EEPROM 8192" }, { "Flash 64", "Flash 64" }, { "Flash 128", "Flash 128" }, { NULL, NULL }},
 				"Auto Detect" },
-			{ MesenGbaRtcType, "System - GBA RTC Type", "RTC Type", "Select the GBA RTC emulation mode", NULL, "system",
+			{ MesenGbaRtcType, "System - GBA RTC Type (restart required)", "RTC Type", "Select the GBA RTC emulation mode", NULL, "system",
 				{{ "Auto Detect", "Auto Detect" }, { "Enabled", "Enabled" }, { "Disabled", "Disabled" }, { NULL, NULL }},
 				"Auto Detect" },
 
 			// PC Engine options
-			{ MesenPceConsoleType, "System - PCE Console Type", "Console Type", "Select the PC Engine console model", NULL, "system",
+			{ MesenPceConsoleType, "System - PCE Console Type (restart required)", "Console Type", "Select the PC Engine console model", NULL, "system",
 				{{ "Auto", "Auto" }, { "PC Engine", "PC Engine" }, { "SuperGrafx", "SuperGrafx" }, { "TurboGrafx", "TurboGrafx" }, { NULL, NULL }},
 				"Auto" },
-			{ MesenPceCdRomType, "System - PCE CD-ROM Type", "CD-ROM Type", "Select the PCE CD-ROM emulation type", NULL, "system",
+			{ MesenPceCdRomType, "System - PCE CD-ROM Type (restart required)", "CD-ROM Type", "Select the PCE CD-ROM emulation type", NULL, "system",
 				{{ "CD-ROM", "CD-ROM" }, { "Super CD-ROM", "Super CD-ROM" }, { "Arcade", "Arcade" }, { NULL, NULL }},
 				"Arcade" },
 			{ MesenPceDisableSprites, "Enhancements - PCE Disable Sprites", "Disable Sprites", "Disable sprite rendering on PCE", NULL, "enhancements",
@@ -899,7 +880,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 				"enabled" },
 
 			// WonderSwan options
-			{ MesenWsModel, "System - WS Model", "Model", "Select the WonderSwan model", NULL, "system",
+			{ MesenWsModel, "System - WS Model (restart required)", "Model", "Select the WonderSwan model", NULL, "system",
 				{{ "Auto", "Auto" }, { "Monochrome", "Monochrome" }, { "Color", "Color" }, { "SwanCrystal", "SwanCrystal" }, { "PocketChallenge", "PocketChallenge" }, { NULL, NULL }},
 				"Auto" },
 			{ MesenWsAutoRotate, "Video - WS Auto Rotate", "Auto Rotate", "Rotate the WonderSwan display automatically", NULL, "video",
@@ -1207,10 +1188,55 @@ void libretro_probe_inputs(const char* tag)
 	{
 		struct retro_variable var = { };
 		NesConfig nesCfg = _emu->GetSettings()->GetNesConfig();
+		SnesConfig snesCfg = _emu->GetSettings()->GetSnesConfig();
 		VideoConfig videoCfg = _emu->GetSettings()->GetVideoConfig();
 		AudioConfig audioCfg = _emu->GetSettings()->GetAudioConfig();
+		GameboyConfig gameboyCfg = _emu->GetSettings()->GetGameboyConfig();
+		GbaConfig gbaCfg = _emu->GetSettings()->GetGbaConfig();
+		PcEngineConfig pceCfg = _emu->GetSettings()->GetPcEngineConfig();
+		SmsConfig smsCfg = _emu->GetSettings()->GetSmsConfig();
+		WsConfig wsCfg = _emu->GetSettings()->GetWsConfig();
 
 		// ===== SYSTEM SETTINGS =====
+
+		// Game Boy Model
+		if(readVariable(MesenGameboyModel, var)) {
+			string value = string(var.value);
+			if(value == "Auto (Best)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorBest;
+			} else if(value == "Auto (GBC)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorGbc;
+			} else if(value == "Auto (SGB)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorSgb;
+			} else if(value == "Auto (GB)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorGb;
+			} else if(value == "Game Boy") {
+				gameboyCfg.Model = GameboyModel::Gameboy;
+			} else if(value == "Game Boy Color") {
+				gameboyCfg.Model = GameboyModel::GameboyColor;
+			} else if(value == "Super Game Boy") {
+				gameboyCfg.Model = GameboyModel::SuperGameboy;
+			}
+		}
+
+		if(readVariable(MesenGameboyBlendFrames, var)) {
+			gameboyCfg.BlendFrames = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyAdjustColors, var)) {
+			gameboyCfg.GbcAdjustColors = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyDisableBackground, var)) {
+			gameboyCfg.DisableBackground = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyDisableSprites, var)) {
+			gameboyCfg.DisableSprites = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyRemoveSpriteLimit, var)) {
+			gameboyCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyHideSgbBorders, var)) {
+			gameboyCfg.HideSgbBorders = (string(var.value) == "enabled");
+		}
 		
 		// Region
 		if(readVariable(MesenRegion, var)) {
@@ -1277,6 +1303,165 @@ void libretro_probe_inputs(const char* tag)
 		}
 
 		// ===== VIDEO SETTINGS =====
+
+		// SNES layer and sprite enhancements
+		if(readVariable(MesenSnesHideBgLayer1, var)) {
+			snesCfg.HideBgLayer1 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideBgLayer2, var)) {
+			snesCfg.HideBgLayer2 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideBgLayer3, var)) {
+			snesCfg.HideBgLayer3 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideBgLayer4, var)) {
+			snesCfg.HideBgLayer4 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideSprites, var)) {
+			snesCfg.HideSprites = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesRemoveSpriteLimit, var)) {
+			snesCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesColorCorrection, var)) {
+			string value = string(var.value);
+			if(value == "NTSC Black Level") {
+				snesCfg.ColorCorrection = SnesColorCorrectionMode::NtscBlackLevel;
+			} else if(value == "Deep Black Boost") {
+				snesCfg.ColorCorrection = SnesColorCorrectionMode::DeepBlackBoost;
+			} else {
+				snesCfg.ColorCorrection = SnesColorCorrectionMode::None;
+			}
+		}
+		if(readVariable(MesenSnesHighResBlendMode, var)) {
+			string value = string(var.value);
+			if(value == "Blend All") {
+				snesCfg.HighResBlendMode = SnesHighResBlendMode::BlendAll;
+			} else if(value == "Blend Even/Odd") {
+				snesCfg.HighResBlendMode = SnesHighResBlendMode::BlendEvenOdd;
+			} else {
+				snesCfg.HighResBlendMode = SnesHighResBlendMode::None;
+			}
+		}
+		if(readVariable(MesenSnesDeinterlaceMode, var)) {
+			string value = string(var.value);
+			if(value == "Bob Blend") {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::BobBlend;
+			} else if(value == "Bob") {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::Bob;
+			} else if(value == "Current Field") {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::CurrentField;
+			} else {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::Weave;
+			}
+		}
+		if(readVariable(MesenSnesForceFixedResolution, var)) {
+			snesCfg.ForceFixedResolution = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesDisableFrameSkipping, var)) {
+			snesCfg.DisableFrameSkipping = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesEnableStrictBoardMappings, var)) {
+			snesCfg.EnableStrictBoardMappings = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesRandomizePowerOnState, var)) {
+			snesCfg.EnableRandomPowerOnState = (string(var.value) == "enabled");
+		}
+
+		if(readVariable(MesenGbaSkipBootScreen, var)) {
+			gbaCfg.SkipBootScreen = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaBlendFrames, var)) {
+			gbaCfg.BlendFrames = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaAdjustColors, var)) {
+			gbaCfg.GbaAdjustColors = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaDisableSprites, var)) {
+			gbaCfg.DisableSprites = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaDisableBackground, var)) {
+			gbaCfg.HideBgLayers[0] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer1, var)) {
+			gbaCfg.HideBgLayers[0] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer2, var)) {
+			gbaCfg.HideBgLayers[1] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer3, var)) {
+			gbaCfg.HideBgLayers[2] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer4, var)) {
+			gbaCfg.HideBgLayers[3] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaDisableBackground, var) && string(var.value) == "enabled") {
+			for(bool& hidden : gbaCfg.HideBgLayers) {
+				hidden = true;
+			}
+		}
+		if(readVariable(MesenGbaDisableFrameSkipping, var)) {
+			gbaCfg.DisableFrameSkipping = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaSaveType, var)) {
+			string value = string(var.value);
+			if(value == "None") gbaCfg.SaveType = GbaSaveType::None;
+			else if(value == "SRAM") gbaCfg.SaveType = GbaSaveType::Sram;
+			else if(value == "EEPROM 512") gbaCfg.SaveType = GbaSaveType::Eeprom512;
+			else if(value == "EEPROM 8192") gbaCfg.SaveType = GbaSaveType::Eeprom8192;
+			else if(value == "Flash 64") gbaCfg.SaveType = GbaSaveType::Flash64;
+			else if(value == "Flash 128") gbaCfg.SaveType = GbaSaveType::Flash128;
+			else gbaCfg.SaveType = GbaSaveType::AutoDetect;
+		}
+		if(readVariable(MesenGbaRtcType, var)) {
+			string value = string(var.value);
+			gbaCfg.RtcType = value == "Enabled" ? GbaRtcType::Enabled :
+				value == "Disabled" ? GbaRtcType::Disabled : GbaRtcType::AutoDetect;
+		}
+
+		if(readVariable(MesenPceConsoleType, var)) {
+			string value = string(var.value);
+			if(value == "PC Engine") pceCfg.ConsoleType = PceConsoleType::PcEngine;
+			else if(value == "SuperGrafx") pceCfg.ConsoleType = PceConsoleType::SuperGrafx;
+			else if(value == "TurboGrafx") pceCfg.ConsoleType = PceConsoleType::TurboGrafx;
+			else pceCfg.ConsoleType = PceConsoleType::Auto;
+		}
+		if(readVariable(MesenPceCdRomType, var)) {
+			string value = string(var.value);
+			if(value == "CD-ROM") pceCfg.CdRomType = PceCdRomType::CdRom;
+			else if(value == "Super CD-ROM") pceCfg.CdRomType = PceCdRomType::SuperCdRom;
+			else pceCfg.CdRomType = PceCdRomType::Arcade;
+		}
+		if(readVariable(MesenPceDisableSprites, var)) pceCfg.DisableSprites = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableSpritesVdc2, var)) pceCfg.DisableSpritesVdc2 = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableBackground, var)) pceCfg.DisableBackground = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableBackgroundVdc2, var)) pceCfg.DisableBackgroundVdc2 = (string(var.value) == "enabled");
+		if(readVariable(MesenPceRemoveSpriteLimit, var)) pceCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableFrameSkipping, var)) pceCfg.DisableFrameSkipping = (string(var.value) == "enabled");
+		if(readVariable(MesenPceForceFixedResolution, var)) pceCfg.ForceFixedResolution = (string(var.value) == "enabled");
+		if(readVariable(MesenPceUseHuc6280Audio, var)) pceCfg.UseHuC6280aAudio = (string(var.value) == "enabled");
+
+		if(readVariable(MesenSmsUseSgPalette, var)) smsCfg.UseSgPalette = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsGameGearBlendFrames, var)) smsCfg.GgBlendFrames = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsDisableSprites, var)) smsCfg.DisableSprites = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsDisableBackground, var)) smsCfg.DisableBackground = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsRemoveSpriteLimit, var)) smsCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsFmAudio, var)) smsCfg.EnableFmAudio = (string(var.value) == "enabled");
+
+		if(readVariable(MesenWsModel, var)) {
+			string value = string(var.value);
+			if(value == "Monochrome") wsCfg.Model = WsModel::Monochrome;
+			else if(value == "Color") wsCfg.Model = WsModel::Color;
+			else if(value == "SwanCrystal") wsCfg.Model = WsModel::SwanCrystal;
+			else if(value == "PocketChallenge") wsCfg.Model = WsModel::PocketChallenge;
+			else wsCfg.Model = WsModel::Auto;
+		}
+		if(readVariable(MesenWsAutoRotate, var)) wsCfg.AutoRotate = (string(var.value) == "enabled");
+		if(readVariable(MesenWsBlendFrames, var)) wsCfg.BlendFrames = (string(var.value) == "enabled");
+		if(readVariable(MesenWsLcdAdjustColors, var)) wsCfg.LcdAdjustColors = (string(var.value) == "enabled");
+		if(readVariable(MesenWsLcdShowIcons, var)) wsCfg.LcdShowIcons = (string(var.value) == "enabled");
+		if(readVariable(MesenWsAudioMode, var)) wsCfg.AudioMode = string(var.value) == "Speakers" ? WsAudioMode::Speakers : WsAudioMode::Headphones;
+		if(readVariable(MesenWsDisableSprites, var)) wsCfg.DisableSprites = (string(var.value) == "enabled");
 		
 		// Palette
 		if(readVariable(MesenPalette, var)) {
@@ -1411,12 +1596,16 @@ void libretro_probe_inputs(const char* tag)
 		}
 
 		// Audio Sample Rate
+		audioCfg.SampleRate = _audioSampleRate;
 		if(readVariable(MesenAudioSampleRate, var)) {
-			int old_value = audioCfg.SampleRate;
-			audioCfg.SampleRate = atoi(var.value);
-			audioCfg.SampleRate = (audioCfg.SampleRate > 96000) ? 96000 : audioCfg.SampleRate;
+			int requestedRate = atoi(var.value);
+			if(requestedRate == 11025 || requestedRate == 22050 || requestedRate == 44100 ||
+				requestedRate == 48000 || requestedRate == 96000) {
+				audioCfg.SampleRate = requestedRate;
+			}
 
-			if(old_value != audioCfg.SampleRate) {
+			if(_audioSampleRate != (int32_t)audioCfg.SampleRate) {
+				_audioSampleRate = (int32_t)audioCfg.SampleRate;
 				// If core is running, notify frontend of geometry change
 				if(_saveStateSize != -1) {
 					struct retro_system_av_info system_av_info;
@@ -1484,6 +1673,16 @@ void libretro_probe_inputs(const char* tag)
 		nesCfg.Port1SubPorts[2].Keys = getKeyBindings(2);
 		nesCfg.Port1SubPorts[3].Keys = getKeyBindings(3);
 		nesCfg.ExpPort.Keys = getKeyBindings(4);
+		snesCfg.Port1.Keys.TurboSpeed = turboSpeed;
+		snesCfg.Port2.Keys.TurboSpeed = turboSpeed;
+		gameboyCfg.Controller.Keys.TurboSpeed = turboSpeed;
+		gbaCfg.Controller.Keys.TurboSpeed = turboSpeed;
+		pceCfg.Port1.Keys.TurboSpeed = turboSpeed;
+		smsCfg.Port1.Keys.TurboSpeed = turboSpeed;
+		smsCfg.Port2.Keys.TurboSpeed = turboSpeed;
+		wsCfg.ControllerHorizontal.Keys.TurboSpeed = turboSpeed;
+		wsCfg.ControllerVertical.Keys.TurboSpeed = turboSpeed;
+		wsCfg.ControllerPcv2.Keys.TurboSpeed = turboSpeed;
 
 		// ===== ENHANCEMENTS =====
 		
@@ -1546,8 +1745,14 @@ void libretro_probe_inputs(const char* tag)
 		// ===== APPLY ALL SETTINGS =====
 		
 		_emu->GetSettings()->SetNesConfig(nesCfg);
+		_emu->GetSettings()->SetSnesConfig(snesCfg);
 		_emu->GetSettings()->SetVideoConfig(videoCfg);
 		_emu->GetSettings()->SetAudioConfig(audioCfg);
+		_emu->GetSettings()->SetGameboyConfig(gameboyCfg);
+		_emu->GetSettings()->SetGbaConfig(gbaCfg);
+		_emu->GetSettings()->SetPcEngineConfig(pceCfg);
+		_emu->GetSettings()->SetSmsConfig(smsCfg);
+		_emu->GetSettings()->SetWsConfig(wsCfg);
 
 		// Check if geometry-related settings changed
 		bool videoFilterChanged = (_lastVideoConfig.VideoFilter != videoCfg.VideoFilter) ||
@@ -2452,6 +2657,7 @@ void libretro_probe_inputs(const char* tag)
 				AudioConfig audioCfg = _emu->GetSettings()->GetAudioConfig();
 				audioCfg.EnableAudio = true;
 				audioCfg.MasterVolume = 100;
+				audioCfg.SampleRate = _audioSampleRate;
 				_emu->GetSettings()->SetAudioConfig(audioCfg);
 				
 				NesConfig nesCfg = _emu->GetSettings()->GetNesConfig();
@@ -2460,10 +2666,8 @@ void libretro_probe_inputs(const char* tag)
 					if(nesCfg.ChannelVolumes[i] == 0) {
 						nesCfg.ChannelVolumes[i] = 100;
 					}
-					// Initialize panning to center (50) if zero
-					if(nesCfg.ChannelPanning[i] == 0) {
-						nesCfg.ChannelPanning[i] = 50;
-					}
+					// NES channel panning uses 0 as the centered position.
+					nesCfg.ChannelPanning[i] = 0;
 				}
 				_emu->GetSettings()->SetNesConfig(nesCfg);
 			}
@@ -2902,7 +3106,7 @@ void libretro_probe_inputs(const char* tag)
 			fps = _console->GetFps();
 		}
 		info->timing.fps = fps;
-		info->timing.sample_rate = 44100.0;
+		info->timing.sample_rate = (double)_audioSampleRate;
 	}
 
 	RETRO_API void *retro_get_memory_data(unsigned id)
