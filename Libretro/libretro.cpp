@@ -550,6 +550,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		// Create the emulator and initialize its subsystems
 		_emu.reset(new Emulator());
 		_emu->Initialize(); // sets up settings, video/audio subsystems, etc.
+		_emu->GetSettings()->GetPreferences().DisableGameSelectionScreen = true;
 
 		// Provide the global KeyManager with the emulator settings so calls like
 		// KeyManager::SetForceFeedback can safely read configuration values.
