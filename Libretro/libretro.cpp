@@ -89,6 +89,7 @@ static std::unique_ptr<Emulator> _emu;
 // shared_ptr to the console (IConsole interface, may be null until emulator initialized)
 // Supports all console types: NES, SNES, Gameboy, GBA, PC Engine, SMS, Wonderswan
 static std::shared_ptr<IConsole> _console;
+static std::vector<uint32_t> _videoFrameBuffer;
 
 static bool FolderExists(const string& folder)
 {
@@ -1839,46 +1840,46 @@ void libretro_probe_inputs(const char* tag)
 				// Ensure we have valid output before displaying
 				if(src) {
 					size_t pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
+					unsigned outW = outInfo.Width;
+					unsigned outH = outInfo.Height;
 
-					static std::vector<uint32_t> rotBuffer;
-
-					if(_screenRotation == 0) {
-						_videoRefresh(src, outInfo.Width, outInfo.Height, outInfo.Width * 4);
-					} else {
-						int outW = (_screenRotation == 180) ? outInfo.Width : outInfo.Height;
-						int outH = (_screenRotation == 180) ? outInfo.Height : outInfo.Width;
-						rotBuffer.resize((size_t)outW * (size_t)outH);
-
-						if(_screenRotation == 180) {
-							for(size_t i = 0; i < pixels; ++i) rotBuffer[pixels - 1 - i] = src[i];
-							_videoRefresh(rotBuffer.data(), outInfo.Width, outInfo.Height, outInfo.Width * 4);
-						} else if(_screenRotation == 90) {
-							for(int y = 0; y < outInfo.Height; ++y) {
-								for(int x = 0; x < outInfo.Width; ++x) {
-									size_t srcIdx = (size_t)y * outInfo.Width + x;
-									int dstX = outInfo.Height - 1 - y;
-									int dstY = x;
-									size_t dstIdx = (size_t)dstY * outW + (size_t)dstX;
-									rotBuffer[dstIdx] = src[srcIdx];
-								}
-							}
-							_videoRefresh(rotBuffer.data(), outW, outH, outW * 4);
-						} else if(_screenRotation == 270) {
-							for(int y = 0; y < outInfo.Height; ++y) {
-								for(int x = 0; x < outInfo.Width; ++x) {
-									size_t srcIdx = (size_t)y * outInfo.Width + x;
-									int dstX = y;
-									int dstY = outInfo.Width - 1 - x;
-									size_t dstIdx = (size_t)dstY * outW + (size_t)dstX;
-									rotBuffer[dstIdx] = src[srcIdx];
-								}
-							}
-							_videoRefresh(rotBuffer.data(), outW, outH, outW * 4);
-						} else {
-							// Unknown rotation: fallback to non-rotated output
-							_videoRefresh(src, outInfo.Width, outInfo.Height, outInfo.Width * 4);
-						}
+					if(_screenRotation == 90 || _screenRotation == 270) {
+						outW = outInfo.Height;
+						outH = outInfo.Width;
 					}
+
+					// Keep callback data alive after the temporary video filter is destroyed.
+					_videoFrameBuffer.resize((size_t)outW * outH);
+					if(_screenRotation == 180) {
+						for(size_t i = 0; i < pixels; ++i) {
+							_videoFrameBuffer[pixels - 1 - i] = src[i];
+						}
+					} else if(_screenRotation == 90) {
+						for(unsigned y = 0; y < outInfo.Height; ++y) {
+							for(unsigned x = 0; x < outInfo.Width; ++x) {
+								size_t srcIdx = (size_t)y * outInfo.Width + x;
+								unsigned dstX = outInfo.Height - 1 - y;
+								unsigned dstY = x;
+								size_t dstIdx = (size_t)dstY * outW + dstX;
+								_videoFrameBuffer[dstIdx] = src[srcIdx];
+							}
+						}
+					} else if(_screenRotation == 270) {
+						for(unsigned y = 0; y < outInfo.Height; ++y) {
+							for(unsigned x = 0; x < outInfo.Width; ++x) {
+								size_t srcIdx = (size_t)y * outInfo.Width + x;
+								unsigned dstX = y;
+								unsigned dstY = outInfo.Width - 1 - x;
+								size_t dstIdx = (size_t)dstY * outW + dstX;
+								_videoFrameBuffer[dstIdx] = src[srcIdx];
+							}
+						}
+					} else {
+						// Unknown rotation: fallback to non-rotated output.
+						std::copy(src, src + pixels, _videoFrameBuffer.begin());
+					}
+
+					_videoRefresh(_videoFrameBuffer.data(), outW, outH, outW * 4);
 				}
 			}
 		}
