@@ -39,6 +39,8 @@
 #include "../Core/NES/NesMemoryManager.h"
 #include "../Core/NES/BaseMapper.h"
 #include "../Core/Shared/EmuSettings.h"
+#include "../Core/Shared/BatteryManager.h"
+#include "../Core/Shared/MemoryType.h"
 #include "../Core/Shared/CheatManager.h"
 #include "../Core/NES/HdPacks/HdData.h"
 #include "../Core/Shared/SaveStateManager.h"
@@ -90,6 +92,53 @@ static std::unique_ptr<Emulator> _emu;
 // Supports all console types: NES, SNES, Gameboy, GBA, PC Engine, SMS, Wonderswan
 static std::shared_ptr<IConsole> _console;
 static std::vector<uint32_t> _videoFrameBuffer;
+
+static ConsoleMemoryInfo GetLibretroSaveRam()
+{
+	if(!_emu || !_console || !_emu->GetBatteryManager()->HasBattery()) {
+		return {};
+	}
+
+	MemoryType memoryType;
+	switch(_console->GetConsoleType()) {
+		case ConsoleType::Nes: memoryType = MemoryType::NesSaveRam; break;
+		case ConsoleType::Snes: memoryType = MemoryType::SnesSaveRam; break;
+		case ConsoleType::Gameboy: memoryType = MemoryType::GbCartRam; break;
+		case ConsoleType::Gba: memoryType = MemoryType::GbaSaveRam; break;
+		case ConsoleType::PcEngine: memoryType = MemoryType::PceSaveRam; break;
+		case ConsoleType::Sms: memoryType = MemoryType::SmsCartRam; break;
+		case ConsoleType::Ws: memoryType = MemoryType::WsCartRam; break;
+		default: return {};
+	}
+
+	ConsoleMemoryInfo saveRam = _emu->GetMemory(memoryType);
+	return saveRam.Memory && saveRam.Size > 0 ? saveRam : ConsoleMemoryInfo {};
+}
+
+static bool HandleLibretroBattery(const string&, uint8_t* data, uint32_t length, bool)
+{
+	if(!_emu || !data) {
+		return false;
+	}
+
+	// Match the registered main save RAM by address so RTC/EEPROM sidecars keep using files.
+	static const MemoryType saveMemoryTypes[] = {
+		MemoryType::NesSaveRam,
+		MemoryType::SnesSaveRam,
+		MemoryType::GbCartRam,
+		MemoryType::GbaSaveRam,
+		MemoryType::PceSaveRam,
+		MemoryType::SmsCartRam,
+		MemoryType::WsCartRam
+	};
+	for(MemoryType memoryType : saveMemoryTypes) {
+		ConsoleMemoryInfo saveRam = _emu->GetMemory(memoryType);
+		if(saveRam.Memory && saveRam.Size > 0 && data == saveRam.Memory && length <= saveRam.Size) {
+			return true;
+		}
+	}
+	return false;
+}
 
 static bool FolderExists(const string& folder)
 {
@@ -552,6 +601,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		_emu.reset(new Emulator());
 		_emu->Initialize(); // sets up settings, video/audio subsystems, etc.
 		_emu->GetSettings()->GetPreferences().DisableGameSelectionScreen = true;
+		_emu->GetBatteryManager()->SetLibretroBatteryHandler(HandleLibretroBattery);
 
 		// Provide the global KeyManager with the emulator settings so calls like
 		// KeyManager::SetForceFeedback can safely read configuration values.
@@ -3116,41 +3166,29 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API void *retro_get_memory_data(unsigned id)
 	{
+		if(id == RETRO_MEMORY_SAVE_RAM) {
+			return GetLibretroSaveRam().Memory;
+		}
+
 		// Memory access is NES-specific for now
-		if(!_console || _console->GetConsoleType() != ConsoleType::Nes) {
+		if(id != RETRO_MEMORY_SYSTEM_RAM || !_console || _console->GetConsoleType() != ConsoleType::Nes) {
 			return nullptr;
 		}
 		
 		auto nesConsole = std::dynamic_pointer_cast<NesConsole>(_console);
 		if(!nesConsole) return nullptr;
 		
-		BaseMapper* mapper = nesConsole->GetMapper();
-		switch(id) {
-			case RETRO_MEMORY_SAVE_RAM:
-				// Save-ram accessor moved/hidden in BaseMapper; return nullptr until mapped to new API.
-				(void)mapper;
-				return nullptr;
-			case RETRO_MEMORY_SYSTEM_RAM:
-				// Use the renamed GetInternalRam() if available on NesMemoryManager.
-				if(nesConsole->GetMemoryManager()) {
-					return nesConsole->GetMemoryManager()->GetInternalRam();
-				}
-				return nullptr;
+		// Use the renamed GetInternalRam() if available on NesMemoryManager.
+		if(nesConsole->GetMemoryManager()) {
+			return nesConsole->GetMemoryManager()->GetInternalRam();
 		}
 		return nullptr;
 	}
 
 	RETRO_API size_t retro_get_memory_size(unsigned id)
 	{
-		switch(id) {
-			case RETRO_MEMORY_SAVE_RAM: //return mapper->GetMemorySize(DebugMemoryType::SaveRam);
-			   // Mapper API changed; save-RAM access moved. Return 0 for now.
-            // TODO: replace with mapper->GetSaveRam() equivalent when API is available.
-            return 0;
-			case RETRO_MEMORY_SYSTEM_RAM: //return MemoryManager::InternalRAMSize;
-            // Memory manager API renamed to GetInternalRam()
-            // Use the new method if available; otherwise return 0.
-            return 0;		
+		if(id == RETRO_MEMORY_SAVE_RAM) {
+			return GetLibretroSaveRam().Size;
 		}
 		return 0;
 	}

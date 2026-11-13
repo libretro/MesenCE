@@ -18,6 +18,10 @@ class BatteryManager
 private:
 	string _romName;
 	bool _hasBattery = false;
+#ifdef LIBRETRO
+	using LibretroBatteryHandler = bool (*)(const string&, uint8_t*, uint32_t, bool);
+	LibretroBatteryHandler _libretroBatteryHandler = nullptr;
+#endif
 
 	std::weak_ptr<IBatteryProvider> _provider;
 	std::weak_ptr<IBatteryRecorder> _recorder;
@@ -31,6 +35,9 @@ public:
 
 	void SetBatteryProvider(shared_ptr<IBatteryProvider> provider);
 	void SetBatteryRecorder(shared_ptr<IBatteryRecorder> recorder);
+#ifdef LIBRETRO
+	void SetLibretroBatteryHandler(LibretroBatteryHandler handler) { _libretroBatteryHandler = handler; }
+#endif
 
 	void SaveBattery(string extension, uint8_t* data, uint32_t length);
 
