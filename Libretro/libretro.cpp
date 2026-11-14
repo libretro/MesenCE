@@ -480,6 +480,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 		if(consoleType == ConsoleType::Snes) {
 			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenSnesColorCorrection) ||
+				matches(MesenGameboyModel) ||
 				matches(MesenSnesHighResBlendMode) || matches(MesenSnesDeinterlaceMode) || matches(MesenSnesHideBgLayer1) ||
 				matches(MesenSnesHideBgLayer2) || matches(MesenSnesHideBgLayer3) || matches(MesenSnesHideBgLayer4) ||
 				matches(MesenSnesHideSprites) || matches(MesenSnesRemoveSpriteLimit) ||
