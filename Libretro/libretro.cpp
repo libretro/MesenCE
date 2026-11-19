@@ -727,8 +727,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 			// Video category
 			{ MesenPalette, "Video - Palette", "Palette", "Select color palette", NULL, "video",
-			// TODO:FIXME RAW palette doesn't work
-				{{ "Default", "Default" }, { "Composite Direct (by FirebrandX)", }, { "Nes Classic", "NES Classic" }, { "Nestopia (RGB)", "Nestopia RGB" }, { "Original Hardware (by FirebrandX)", "Original Hardware" }, { "PVM Style (by FirebrandX)", "PVM Style" }, { "Sony CXA2025AS", "Sony CXA2025AS" }, { "Unsaturated v6 (by FirebrandX)", "Unsaturated v6" }, { "YUV v3 (by FirebrandX)", "YUV v3" }, { "Wavebeam (by nakedarthur)", "Wavebeam" }, { "Custom", "Custom" }, /*{ "Raw", "Raw" },*/ { NULL, NULL }},
+				{{ "Default", "Default" }, { "Composite Direct (by FirebrandX)", }, { "Nes Classic", "NES Classic" }, { "Nestopia (RGB)", "Nestopia RGB" }, { "Original Hardware (by FirebrandX)", "Original Hardware" }, { "PVM Style (by FirebrandX)", "PVM Style" }, { "Sony CXA2025AS", "Sony CXA2025AS" }, { "Unsaturated v6 (by FirebrandX)", "Unsaturated v6" }, { "YUV v3 (by FirebrandX)", "YUV v3" }, { "Wavebeam (by nakedarthur)", "Wavebeam" }, { "Custom", "Custom" }, { "Raw", "Raw" }, { NULL, NULL }},
 				"Default" },	
 			// TODO:FIXME the commented NTSC filters don't work	
 			{ MesenNtscFilter, "Video - NTSC Filter", "NTSC Filter", "NTSC video filter", NULL, "video",
@@ -1237,6 +1236,18 @@ void libretro_probe_inputs(const char* tag)
 		}
 	}
 
+	static void apply_raw_palette(uint16_t* src, size_t pixelCount, std::vector<uint32_t>& outBuffer)
+	{
+		outBuffer.resize(pixelCount);
+		for(size_t i = 0; i < pixelCount; ++i) {
+			uint16_t color = src[i] & 0x01FF;
+			uint32_t red = (color & 0x0F) * 255 / 15;
+			uint32_t green = ((color >> 4) & 0x03) * 255 / 3;
+			uint32_t blue = ((color >> 6) & 0x07) * 255 / 7;
+			outBuffer[i] = (red << 16) | (green << 8) | blue;
+		}
+	}
+
 	void update_settings()
 	{
 		struct retro_variable var = { };
@@ -1518,6 +1529,7 @@ void libretro_probe_inputs(const char* tag)
 		
 		// Palette
 		if(readVariable(MesenPalette, var)) {
+			_videoFilterRaw = false;
 			string value = string(var.value);
 			if(value == "Default") {
 				_userRgbPalette.assign(std::begin(defaultPalette), std::end(defaultPalette));
@@ -1881,16 +1893,27 @@ void libretro_probe_inputs(const char* tag)
 			PpuFrameInfo frame = _emu->GetPpuFrame();
 			// Check that we have a valid buffer with meaningful size (each system allocates differently)
 			if(_videoRefresh && frame.FrameBuffer && frame.FrameBufferSize > 0) {
-				// Create a temporary video filter (same pattern used by LuaApi)
-				std::unique_ptr<BaseVideoFilter> filter(_emu->GetVideoFilter());
-				FrameInfo baseSize = { frame.Width, frame.Height };
-				filter->SetBaseFrameInfo(baseSize);
-				FrameInfo outInfo = filter->SendFrame((uint16_t*)frame.FrameBuffer, _emu->GetFrameCount(), _emu->GetFrameCount() & 0x01, nullptr, false);
+				std::vector<uint32_t> rawFrameBuffer;
+				uint32_t* src = nullptr;
+				FrameInfo outInfo = { frame.Width, frame.Height };
+				size_t pixels = 0;
 
-				uint32_t* src = filter->GetOutputBuffer();
+				if(_videoFilterRaw) {
+					pixels = (size_t)frame.Width * (size_t)frame.Height;
+					apply_raw_palette((uint16_t*)frame.FrameBuffer, pixels, rawFrameBuffer);
+					src = rawFrameBuffer.data();
+				} else {
+					// Create a temporary video filter (same pattern used by LuaApi)
+					std::unique_ptr<BaseVideoFilter> filter(_emu->GetVideoFilter());
+					FrameInfo baseSize = { frame.Width, frame.Height };
+					filter->SetBaseFrameInfo(baseSize);
+					outInfo = filter->SendFrame((uint16_t*)frame.FrameBuffer, _emu->GetFrameCount(), _emu->GetFrameCount() & 0x01, nullptr, false);
+					src = filter->GetOutputBuffer();
+					pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
+				}
+
 				// Ensure we have valid output before displaying
 				if(src) {
-					size_t pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
 					unsigned outW = outInfo.Width;
 					unsigned outH = outInfo.Height;
 
