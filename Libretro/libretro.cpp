@@ -298,7 +298,7 @@ static void logSgbDebugf(const char* fmt, ...)
 // Geometry tracking
 static bool _geometryDirty = false;
 static VideoConfig _lastVideoConfig = {};
-static NesConfig _lastNesConfig = {};
+static OverscanDimensions _lastOverscan = {};
 static uint32_t _lastReportedWidth = 256;
 static uint32_t _lastReportedHeight = 240;
 
@@ -363,10 +363,10 @@ static constexpr const char* MesenRandomizeMapperPowerOnState = "mesen_randomize
 static constexpr const char* MesenRandomizeCpuPpuAlignment = "mesen_randomize_cpu_ppu_alignment";
 static constexpr const char* MesenOverclock = "mesen_overclock";
 static constexpr const char* MesenOverclockType = "mesen_overclock_type";
-//static constexpr const char* MesenOverscanLeft = "mesen_overscan_left";
-//static constexpr const char* MesenOverscanRight = "mesen_overscan_right";
-//static constexpr const char* MesenOverscanTop = "mesen_overscan_up";
-//static constexpr const char* MesenOverscanBottom = "mesen_overscan_down";
+static constexpr const char* MesenOverscanLeft = "mesen_overscan_left";
+static constexpr const char* MesenOverscanRight = "mesen_overscan_right";
+static constexpr const char* MesenOverscanTop = "mesen_overscan_up";
+static constexpr const char* MesenOverscanBottom = "mesen_overscan_down";
 //static constexpr const char* MesenAspectRatio = "mesen_aspect_ratio";
 static constexpr const char* MesenRegion = "mesen_region";
 static constexpr const char* MesenRamState = "mesen_ramstate";
@@ -471,7 +471,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
 				matches(MesenFdsAutoSelectDisk) || matches(MesenFdsFastForwardLoad) || matches(MesenAllowInvalidInput) ||
 				matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) || matches(MesenPalette) ||
-				matches(MesenNtscFilter) || matches(MesenEnablePalBorders) || matches(MesenFakeStereo) ||
+				matches(MesenNtscFilter) || matches(MesenOverscanLeft) || matches(MesenOverscanRight) ||
+				matches(MesenOverscanTop) || matches(MesenOverscanBottom) || matches(MesenEnablePalBorders) || matches(MesenFakeStereo) ||
 				matches(MesenMuteTriangleUltrasonic) || matches(MesenReduceDmcPopping) || matches(MesenSwapDutyCycle) ||
 				matches(MesenDisableNoiseModeFlag) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
 				matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) || matches(MesenDisableGameGenieBusConflicts) ||
@@ -479,7 +480,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		if(consoleType == ConsoleType::Snes) {
-			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenSnesColorCorrection) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenOverscanLeft) ||
+				matches(MesenOverscanRight) || matches(MesenOverscanTop) || matches(MesenOverscanBottom) || matches(MesenSnesColorCorrection) ||
 				matches(MesenGameboyModel) ||
 				matches(MesenSnesHighResBlendMode) || matches(MesenSnesDeinterlaceMode) || matches(MesenSnesHideBgLayer1) ||
 				matches(MesenSnesHideBgLayer2) || matches(MesenSnesHideBgLayer3) || matches(MesenSnesHideBgLayer4) ||
@@ -503,7 +505,9 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		if(consoleType == ConsoleType::PcEngine) {
-			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenPceConsoleType) || matches(MesenPceCdRomType) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenOverscanLeft) ||
+				matches(MesenOverscanRight) || matches(MesenOverscanTop) || matches(MesenOverscanBottom) ||
+				matches(MesenPceConsoleType) || matches(MesenPceCdRomType) ||
 				matches(MesenPceDisableSprites) || matches(MesenPceDisableSpritesVdc2) || matches(MesenPceDisableBackground) ||
 				matches(MesenPceDisableBackgroundVdc2) || matches(MesenPceRemoveSpriteLimit) ||
 				matches(MesenPceDisableFrameSkipping) || matches(MesenPceForceFixedResolution) ||
@@ -511,7 +515,9 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		if(consoleType == ConsoleType::Sms) {
-			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenSmsUseSgPalette) || matches(MesenSmsGameGearBlendFrames) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenOverscanLeft) ||
+				matches(MesenOverscanRight) || matches(MesenOverscanTop) || matches(MesenOverscanBottom) ||
+				matches(MesenSmsUseSgPalette) || matches(MesenSmsGameGearBlendFrames) ||
 				matches(MesenSmsDisableSprites) || matches(MesenSmsDisableBackground) || matches(MesenSmsRemoveSpriteLimit) ||
 				matches(MesenSmsFmAudio);
 		}
@@ -535,7 +541,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			MesenRegion, MesenRamState, MesenOverclock, MesenOverclockType,
 			MesenFdsAutoSelectDisk, MesenFdsFastForwardLoad,
 			MesenAllowInvalidInput, MesenRandomizeMapperPowerOnState, MesenRandomizeCpuPpuAlignment,
-			MesenPalette, MesenNtscFilter, MesenEnablePalBorders,
+			MesenPalette, MesenNtscFilter, MesenOverscanLeft, MesenOverscanRight,
+			MesenOverscanTop, MesenOverscanBottom, MesenEnablePalBorders,
 			MesenFakeStereo, MesenMuteTriangleUltrasonic, MesenReduceDmcPopping,
 			MesenSwapDutyCycle, MesenDisableNoiseModeFlag, MesenAudioSampleRate,
 			MesenControllerTurboSpeed, MesenSpritesEnabled, MesenBackgroundEnabled,
@@ -733,20 +740,19 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenNtscFilter, "Video - NTSC Filter", "NTSC Filter", "NTSC video filter", NULL, "video",
 				{{ "Disabled", "Disabled" }, { "Composite (Blargg)", "Composite (Blargg)" }, /*{ "S-Video (Blargg)", "S-Video (Blargg)" }, { "RGB (Blargg)", "RGB (Blargg)" }, { "Monochrome (Blargg)", "Monochrome (Blargg)" }, { "Bisqwit 2x", "Bisqwit 2x" }, { "Bisqwit 4x", "Bisqwit 4x" }, { "Bisqwit 8x", "Bisqwit 8x" },*/ { NULL, NULL }},
 				"Disabled" },
-		   // TODO:FIXME overscan cropping and AR options don't work
-/*			{ MesenOverscanLeft, "Video - Overscan Left", "Overscan Left", "Left overscan", NULL, "video",
+			{ MesenOverscanLeft, "Video - Overscan Left", "Overscan Left", "Crop pixels from the left edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenOverscanRight, "Video - Overscan Right", "Overscan Right", "Right overscan", NULL, "video",
+			{ MesenOverscanRight, "Video - Overscan Right", "Overscan Right", "Crop pixels from the right edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenOverscanTop, "Video - Overscan Top", "Overscan Top", "Top overscan", NULL, "video",
+			{ MesenOverscanTop, "Video - Overscan Top", "Overscan Top", "Crop pixels from the top edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenOverscanBottom, "Video - Overscan Bottom", "Overscan Bottom", "Bottom overscan", NULL, "video",
+			{ MesenOverscanBottom, "Video - Overscan Bottom", "Overscan Bottom", "Crop pixels from the bottom edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenAspectRatio, "Video - Aspect Ratio", "Aspect Ratio", "Display aspect ratio", NULL, "video",
+/*			{ MesenAspectRatio, "Video - Aspect Ratio", "Aspect Ratio", "Display aspect ratio", NULL, "video",
 				{{ "Auto", "Auto" }, { "No Stretching", "No Stretching" }, { "NTSC", "NTSC" }, { "PAL", "PAL" }, { "4:3", "4:3" }, { "4:3 (Preserved)", "4:3 (Preserved)" }, { "16:9", "16:9" }, { "16:9 (Preserved)", "16:9 (Preserved)" }, { NULL, NULL }},
 				"Auto" },
 			{ MesenScreenRotation, "Video - Screen Rotation", "Screen Rotation", "Rotate screen display", NULL, "video",
@@ -1236,16 +1242,32 @@ void libretro_probe_inputs(const char* tag)
 		}
 	}
 
-	static void apply_raw_palette(uint16_t* src, size_t pixelCount, std::vector<uint32_t>& outBuffer)
+	static FrameInfo apply_raw_palette(
+		uint16_t* src,
+		uint32_t width,
+		uint32_t height,
+		OverscanDimensions overscan,
+		std::vector<uint32_t>& outBuffer)
 	{
-		outBuffer.resize(pixelCount);
-		for(size_t i = 0; i < pixelCount; ++i) {
-			uint16_t color = src[i] & 0x01FF;
-			uint32_t red = (color & 0x0F) * 255 / 15;
-			uint32_t green = ((color >> 4) & 0x03) * 255 / 3;
-			uint32_t blue = ((color >> 6) & 0x07) * 255 / 7;
-			outBuffer[i] = (red << 16) | (green << 8) | blue;
+		uint32_t left = std::min(overscan.Left, width);
+		uint32_t right = std::min(overscan.Right, width - left);
+		uint32_t top = std::min(overscan.Top, height);
+		uint32_t bottom = std::min(overscan.Bottom, height - top);
+		uint32_t outputWidth = width - left - right;
+		uint32_t outputHeight = height - top - bottom;
+		outBuffer.resize((size_t)outputWidth * outputHeight);
+
+		size_t outputIndex = 0;
+		for(uint32_t y = top; y < height - bottom; ++y) {
+			for(uint32_t x = left; x < width - right; ++x) {
+				uint16_t color = src[(size_t)y * width + x] & 0x01FF;
+				uint32_t red = (color & 0x0F) * 255 / 15;
+				uint32_t green = ((color >> 4) & 0x03) * 255 / 3;
+				uint32_t blue = ((color >> 6) & 0x07) * 255 / 7;
+				outBuffer[outputIndex++] = (red << 16) | (green << 8) | blue;
+			}
 		}
+		return { outputWidth, outputHeight };
 	}
 
 	void update_settings()
@@ -1598,15 +1620,36 @@ void libretro_probe_inputs(const char* tag)
 				videoCfg.NtscScale = NtscBisqwitFilterScale::_8x;
 			}*/
 		}
-/*
 		// Overscan
-		nesCfg.NtscOverscan.Left = readOverscanValue(MesenOverscanLeft);
-		nesCfg.NtscOverscan.Right = readOverscanValue(MesenOverscanRight);
-		nesCfg.NtscOverscan.Top = readOverscanValue(MesenOverscanTop);
-		nesCfg.NtscOverscan.Bottom = readOverscanValue(MesenOverscanBottom);
-		// Use same overscan for PAL
-		nesCfg.PalOverscan = nesCfg.NtscOverscan;
+		OverscanDimensions overscanDimensions = {
+			readOverscanValue(MesenOverscanLeft),
+			readOverscanValue(MesenOverscanRight),
+			readOverscanValue(MesenOverscanTop),
+			readOverscanValue(MesenOverscanBottom)
+		};
+		switch(_emu->GetConsoleType()) {
+			case ConsoleType::Nes:
+				nesCfg.NtscOverscan = overscanDimensions;
+				nesCfg.PalOverscan = overscanDimensions;
+				break;
+			case ConsoleType::Snes:
+				snesCfg.Overscan = overscanDimensions;
+				break;
+			case ConsoleType::PcEngine:
+				pceCfg.Overscan = overscanDimensions;
+				break;
+			case ConsoleType::Sms:
+				smsCfg.NtscOverscan = overscanDimensions;
+				smsCfg.PalOverscan = overscanDimensions;
+				smsCfg.GameGearOverscan = overscanDimensions;
+				break;
+			case ConsoleType::Gameboy:
+			case ConsoleType::Gba:
+			case ConsoleType::Ws:
+				break;
+		}
 
+/*
 		// Aspect Ratio
 		if(readVariable(MesenAspectRatio, var)) {
 			_selectedAspectRatio = std::string(var.value ? var.value : "");
@@ -1823,14 +1866,11 @@ void libretro_probe_inputs(const char* tag)
 		bool videoFilterChanged = (_lastVideoConfig.VideoFilter != videoCfg.VideoFilter) ||
 			(_lastVideoConfig.NtscScale != videoCfg.NtscScale) ||
 			(_lastVideoConfig.ScreenRotation != videoCfg.ScreenRotation);
-		bool overscanChanged = (nesCfg.NtscOverscan.Left != _lastNesConfig.NtscOverscan.Left) ||
-			(nesCfg.NtscOverscan.Right != _lastNesConfig.NtscOverscan.Right) ||
-			(nesCfg.NtscOverscan.Top != _lastNesConfig.NtscOverscan.Top) ||
-			(nesCfg.NtscOverscan.Bottom != _lastNesConfig.NtscOverscan.Bottom) ||
-			(nesCfg.PalOverscan.Left != _lastNesConfig.PalOverscan.Left) ||
-			(nesCfg.PalOverscan.Right != _lastNesConfig.PalOverscan.Right) ||
-			(nesCfg.PalOverscan.Top != _lastNesConfig.PalOverscan.Top) ||
-			(nesCfg.PalOverscan.Bottom != _lastNesConfig.PalOverscan.Bottom);
+		OverscanDimensions overscan = _emu->GetSettings()->GetOverscan();
+		bool overscanChanged = (overscan.Left != _lastOverscan.Left) ||
+			(overscan.Right != _lastOverscan.Right) ||
+			(overscan.Top != _lastOverscan.Top) ||
+			(overscan.Bottom != _lastOverscan.Bottom);
 
 		if(videoFilterChanged || overscanChanged) {
 			_geometryDirty = true;
@@ -1841,7 +1881,7 @@ void libretro_probe_inputs(const char* tag)
 
 		// Save current settings for next comparison
 		_lastVideoConfig = videoCfg;
-		_lastNesConfig = nesCfg;
+		_lastOverscan = overscan;
 	}
 
 	RETRO_API void retro_run()
@@ -1894,20 +1934,26 @@ void libretro_probe_inputs(const char* tag)
 			// Check that we have a valid buffer with meaningful size (each system allocates differently)
 			if(_videoRefresh && frame.FrameBuffer && frame.FrameBufferSize > 0) {
 				std::vector<uint32_t> rawFrameBuffer;
+				std::unique_ptr<BaseVideoFilter> filter;
 				uint32_t* src = nullptr;
 				FrameInfo outInfo = { frame.Width, frame.Height };
 				size_t pixels = 0;
 
-				if(_videoFilterRaw) {
-					pixels = (size_t)frame.Width * (size_t)frame.Height;
-					apply_raw_palette((uint16_t*)frame.FrameBuffer, pixels, rawFrameBuffer);
+				if(_videoFilterRaw && consoleIf->GetConsoleType() == ConsoleType::Nes) {
+					outInfo = apply_raw_palette(
+						(uint16_t*)frame.FrameBuffer,
+						frame.Width,
+						frame.Height,
+						_emu->GetSettings()->GetOverscan(),
+						rawFrameBuffer);
+					pixels = (size_t)outInfo.Width * outInfo.Height;
 					src = rawFrameBuffer.data();
 				} else {
 					// Create a temporary video filter (same pattern used by LuaApi)
-					std::unique_ptr<BaseVideoFilter> filter(_emu->GetVideoFilter());
+					filter.reset(_emu->GetVideoFilter());
 					FrameInfo baseSize = { frame.Width, frame.Height };
 					filter->SetBaseFrameInfo(baseSize);
-					outInfo = filter->SendFrame((uint16_t*)frame.FrameBuffer, _emu->GetFrameCount(), _emu->GetFrameCount() & 0x01, nullptr, false);
+					outInfo = filter->SendFrame((uint16_t*)frame.FrameBuffer, _emu->GetFrameCount(), _emu->GetFrameCount() & 0x01, nullptr, true);
 					src = filter->GetOutputBuffer();
 					pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
 				}
