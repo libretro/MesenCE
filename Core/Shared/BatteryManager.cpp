@@ -37,6 +37,12 @@ void BatteryManager::SaveBattery(string extension, uint8_t* data, uint32_t lengt
 	}
 
 	_hasBattery = true;
+#ifdef LIBRETRO
+	if(_libretroBatteryHandler && _libretroBatteryHandler(extension, data, length, true)) {
+		return;
+	}
+#endif
+
 	ofstream out(GetBasePath(extension), ios::binary);
 	if(out) {
 		out.write((char*)data, length);
@@ -77,6 +83,17 @@ vector<uint8_t> BatteryManager::LoadBattery(string extension)
 
 void BatteryManager::LoadBattery(string extension, uint8_t* data, uint32_t length)
 {
+	if(_romName.empty()) {
+		return;
+	}
+
+#ifdef LIBRETRO
+	if(_libretroBatteryHandler && _libretroBatteryHandler(extension, data, length, false)) {
+		_hasBattery = true;
+		return;
+	}
+#endif
+
 	vector<uint8_t> batteryData = LoadBattery(extension);
 	memcpy(data, batteryData.data(), std::min((uint32_t)batteryData.size(), length));
 }

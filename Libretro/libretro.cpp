@@ -39,6 +39,8 @@
 #include "../Core/NES/NesMemoryManager.h"
 #include "../Core/NES/BaseMapper.h"
 #include "../Core/Shared/EmuSettings.h"
+#include "../Core/Shared/BatteryManager.h"
+#include "../Core/Shared/MemoryType.h"
 #include "../Core/Shared/CheatManager.h"
 #include "../Core/NES/HdPacks/HdData.h"
 #include "../Core/Shared/SaveStateManager.h"
@@ -91,6 +93,55 @@ static std::unique_ptr<Emulator> _emu;
 // shared_ptr to the console (IConsole interface, may be null until emulator initialized)
 // Supports all console types: NES, SNES, Gameboy, GBA, PC Engine, SMS, Wonderswan
 static std::shared_ptr<IConsole> _console;
+static std::unique_ptr<BaseVideoFilter> _videoFilter;
+static std::vector<uint32_t> _videoFrameBuffer;
+
+static ConsoleMemoryInfo GetLibretroSaveRam()
+{
+	if(!_emu || !_console || !_emu->GetBatteryManager()->HasBattery()) {
+		return {};
+	}
+
+	MemoryType memoryType;
+	switch(_console->GetConsoleType()) {
+		case ConsoleType::Nes: memoryType = MemoryType::NesSaveRam; break;
+		case ConsoleType::Snes: memoryType = MemoryType::SnesSaveRam; break;
+		case ConsoleType::Gameboy: memoryType = MemoryType::GbCartRam; break;
+		case ConsoleType::Gba: memoryType = MemoryType::GbaSaveRam; break;
+		case ConsoleType::PcEngine: memoryType = MemoryType::PceSaveRam; break;
+		case ConsoleType::Sms: memoryType = MemoryType::SmsCartRam; break;
+		case ConsoleType::Ws: memoryType = MemoryType::WsCartRam; break;
+		default: return {};
+	}
+
+	ConsoleMemoryInfo saveRam = _emu->GetMemory(memoryType);
+	return saveRam.Memory && saveRam.Size > 0 ? saveRam : ConsoleMemoryInfo {};
+}
+
+static bool HandleLibretroBattery(const string&, uint8_t* data, uint32_t length, bool)
+{
+	if(!_emu || !data) {
+		return false;
+	}
+
+	// Match the registered main save RAM by address so RTC/EEPROM sidecars keep using files.
+	static const MemoryType saveMemoryTypes[] = {
+		MemoryType::NesSaveRam,
+		MemoryType::SnesSaveRam,
+		MemoryType::GbCartRam,
+		MemoryType::GbaSaveRam,
+		MemoryType::PceSaveRam,
+		MemoryType::SmsCartRam,
+		MemoryType::WsCartRam
+	};
+	for(MemoryType memoryType : saveMemoryTypes) {
+		ConsoleMemoryInfo saveRam = _emu->GetMemory(memoryType);
+		if(saveRam.Memory && saveRam.Size > 0 && data == saveRam.Memory && length <= saveRam.Size) {
+			return true;
+		}
+	}
+	return false;
+}
 
 static bool FolderExists(const string& folder)
 {
@@ -250,7 +301,7 @@ static void logSgbDebugf(const char* fmt, ...)
 // Geometry tracking
 static bool _geometryDirty = false;
 static VideoConfig _lastVideoConfig = {};
-static NesConfig _lastNesConfig = {};
+static OverscanDimensions _lastOverscan = {};
 static uint32_t _lastReportedWidth = 256;
 static uint32_t _lastReportedHeight = 240;
 
@@ -315,10 +366,10 @@ static constexpr const char* MesenRandomizeMapperPowerOnState = "mesen_randomize
 static constexpr const char* MesenRandomizeCpuPpuAlignment = "mesen_randomize_cpu_ppu_alignment";
 static constexpr const char* MesenOverclock = "mesen_overclock";
 static constexpr const char* MesenOverclockType = "mesen_overclock_type";
-//static constexpr const char* MesenOverscanLeft = "mesen_overscan_left";
-//static constexpr const char* MesenOverscanRight = "mesen_overscan_right";
-//static constexpr const char* MesenOverscanTop = "mesen_overscan_up";
-//static constexpr const char* MesenOverscanBottom = "mesen_overscan_down";
+static constexpr const char* MesenOverscanLeft = "mesen_overscan_left";
+static constexpr const char* MesenOverscanRight = "mesen_overscan_right";
+static constexpr const char* MesenOverscanTop = "mesen_overscan_up";
+static constexpr const char* MesenOverscanBottom = "mesen_overscan_down";
 //static constexpr const char* MesenAspectRatio = "mesen_aspect_ratio";
 static constexpr const char* MesenRegion = "mesen_region";
 static constexpr const char* MesenRamState = "mesen_ramstate";
@@ -455,7 +506,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
 				matches(MesenFdsAutoSelectDisk) || matches(MesenFdsFastForwardLoad) || matches(MesenAllowInvalidInput) ||
 				matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) || matches(MesenPalette) ||
-				matches(MesenNtscFilter) || matches(MesenEnablePalBorders) || matches(MesenFakeStereo) ||
+				matches(MesenNtscFilter) || matches(MesenOverscanLeft) || matches(MesenOverscanRight) ||
+				matches(MesenOverscanTop) || matches(MesenOverscanBottom) || matches(MesenEnablePalBorders) || matches(MesenFakeStereo) ||
 				matches(MesenMuteTriangleUltrasonic) || matches(MesenReduceDmcPopping) || matches(MesenSwapDutyCycle) ||
 				matches(MesenDisableNoiseModeFlag) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
 				matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) || matches(MesenDisableGameGenieBusConflicts) ||
@@ -463,67 +515,52 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		if(consoleType == ConsoleType::Snes) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenNtscFilter) || matches(MesenEnablePalBorders) || matches(MesenAudioSampleRate) ||
-				matches(MesenControllerTurboSpeed) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenSpriteLimit) || matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) ||
-				matches(MesenRandomizeCpuPpuAlignment) || matches(MesenFakeStereo) || matches(MesenSnesColorCorrection) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenOverscanLeft) ||
+				matches(MesenOverscanRight) || matches(MesenOverscanTop) || matches(MesenOverscanBottom) || matches(MesenSnesColorCorrection) ||
+				matches(MesenGameboyModel) ||
 				matches(MesenSnesHighResBlendMode) || matches(MesenSnesDeinterlaceMode) || matches(MesenSnesHideBgLayer1) ||
 				matches(MesenSnesHideBgLayer2) || matches(MesenSnesHideBgLayer3) || matches(MesenSnesHideBgLayer4) ||
-				matches(MesenSnesHideSprites) || matches(MesenSnesRemoveSpriteLimit) || matches(MesenSnesForceFixedResolution) ||
-				matches(MesenSnesDisableFrameSkipping) || matches(MesenSnesEnableStrictBoardMappings) ||
-				matches(MesenSnesRandomizePowerOnState);
+				matches(MesenSnesHideSprites) || matches(MesenSnesRemoveSpriteLimit) ||
+				matches(MesenSnesForceFixedResolution) || matches(MesenSnesDisableFrameSkipping) ||
+				matches(MesenSnesEnableStrictBoardMappings) || matches(MesenSnesRandomizePowerOnState);
 		}
 
 		if(consoleType == ConsoleType::Gameboy) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) || matches(MesenSpriteLimit) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenGameboyModel) || matches(MesenGameboyBlendFrames) ||
-				matches(MesenGameboyAdjustColors) || matches(MesenGameboyDisableBackground) || matches(MesenGameboyDisableSprites) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenGameboyModel) || matches(MesenGameboyBlendFrames) ||
+				matches(MesenGameboyAdjustColors) || matches(MesenGameboyDisableSprites) ||
 				matches(MesenGameboyRemoveSpriteLimit) || matches(MesenGameboyHideSgbBorders);
 		}
 
 		if(consoleType == ConsoleType::Gba) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenGbaSkipBootScreen) || matches(MesenGbaBlendFrames) || matches(MesenGbaAdjustColors) ||
-				matches(MesenGbaDisableSprites) || matches(MesenGbaDisableBackground) || matches(MesenGbaHideBgLayer1) ||
-				matches(MesenGbaHideBgLayer2) || matches(MesenGbaHideBgLayer3) || matches(MesenGbaHideBgLayer4) ||
-				matches(MesenGbaDisableFrameSkipping) || matches(MesenGbaSaveType) || matches(MesenGbaRtcType);
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenGbaSkipBootScreen) || matches(MesenGbaBlendFrames) ||
+				matches(MesenGbaAdjustColors) || matches(MesenGbaDisableSprites) || matches(MesenGbaDisableBackground) ||
+				matches(MesenGbaHideBgLayer1) || matches(MesenGbaHideBgLayer2) || matches(MesenGbaHideBgLayer3) ||
+				matches(MesenGbaHideBgLayer4) || matches(MesenGbaDisableFrameSkipping) || matches(MesenGbaSaveType) ||
+				matches(MesenGbaRtcType);
 		}
 
 		if(consoleType == ConsoleType::PcEngine) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenPceConsoleType) || matches(MesenPceCdRomType) || matches(MesenPceDisableSprites) ||
-				matches(MesenPceDisableSpritesVdc2) || matches(MesenPceDisableBackground) || matches(MesenPceDisableBackgroundVdc2) ||
-				matches(MesenPceRemoveSpriteLimit) || matches(MesenPceDisableFrameSkipping) || matches(MesenPceForceFixedResolution) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenOverscanLeft) ||
+				matches(MesenOverscanRight) || matches(MesenOverscanTop) || matches(MesenOverscanBottom) ||
+				matches(MesenPceConsoleType) || matches(MesenPceCdRomType) ||
+				matches(MesenPceDisableSprites) || matches(MesenPceDisableSpritesVdc2) || matches(MesenPceDisableBackground) ||
+				matches(MesenPceDisableBackgroundVdc2) || matches(MesenPceRemoveSpriteLimit) ||
+				matches(MesenPceDisableFrameSkipping) || matches(MesenPceForceFixedResolution) ||
 				matches(MesenPceUseHuc6280Audio);
 		}
 
 		if(consoleType == ConsoleType::Sms) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenNtscFilter) || matches(MesenSmsUseSgPalette) || matches(MesenSmsGameGearBlendFrames) ||
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenOverscanLeft) ||
+				matches(MesenOverscanRight) || matches(MesenOverscanTop) || matches(MesenOverscanBottom) ||
+				matches(MesenSmsUseSgPalette) || matches(MesenSmsGameGearBlendFrames) ||
 				matches(MesenSmsDisableSprites) || matches(MesenSmsDisableBackground) || matches(MesenSmsRemoveSpriteLimit) ||
 				matches(MesenSmsFmAudio);
 		}
 
 		if(consoleType == ConsoleType::Ws) {
-			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
-				matches(MesenPalette) || matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) ||
-				matches(MesenSpriteLimit) || matches(MesenSpritesEnabled) || matches(MesenBackgroundEnabled) ||
-				matches(MesenAllowInvalidInput) || matches(MesenRandomizeMapperPowerOnState) || matches(MesenRandomizeCpuPpuAlignment) ||
-				matches(MesenFakeStereo) || matches(MesenWsModel) || matches(MesenWsAutoRotate) || matches(MesenWsBlendFrames) ||
-				matches(MesenWsLcdAdjustColors) || matches(MesenWsLcdShowIcons) || matches(MesenWsAudioMode) || matches(MesenWsDisableSprites);
+			return matches(MesenAudioSampleRate) || matches(MesenControllerTurboSpeed) || matches(MesenWsModel) || matches(MesenWsAutoRotate) ||
+				matches(MesenWsBlendFrames) || matches(MesenWsLcdAdjustColors) || matches(MesenWsLcdShowIcons) ||
+				matches(MesenWsAudioMode) || matches(MesenWsDisableSprites);
 		}
 
 		return true;
@@ -539,7 +576,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			MesenRegion, MesenRamState, MesenSortSavesBySystem, MesenOverclock, MesenOverclockType,
 			MesenFdsAutoSelectDisk, MesenFdsFastForwardLoad,
 			MesenAllowInvalidInput, MesenRandomizeMapperPowerOnState, MesenRandomizeCpuPpuAlignment,
-			MesenPalette, MesenNtscFilter, MesenEnablePalBorders,
+			MesenPalette, MesenNtscFilter, MesenOverscanLeft, MesenOverscanRight,
+			MesenOverscanTop, MesenOverscanBottom, MesenEnablePalBorders,
 			MesenFakeStereo, MesenMuteTriangleUltrasonic, MesenReduceDmcPopping,
 			MesenSwapDutyCycle, MesenDisableNoiseModeFlag, MesenAudioSampleRate,
 			MesenControllerTurboSpeed, MesenSpritesEnabled, MesenBackgroundEnabled,
@@ -589,6 +627,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 	{
 		_sortSavesInitialized = false;
 		_sortSavesBySystem = false;
+		_audioSampleRate = 44100;
+
 		struct retro_log_callback log;
 		if(env_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log)) {
 			logCallback = log.log;
@@ -605,6 +645,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		// Create the emulator and initialize its subsystems
 		_emu.reset(new Emulator());
 		_emu->Initialize(); // sets up settings, video/audio subsystems, etc.
+		_emu->GetSettings()->GetPreferences().DisableGameSelectionScreen = true;
+		_emu->GetBatteryManager()->SetLibretroBatteryHandler(HandleLibretroBattery);
 
 		// Provide the global KeyManager with the emulator settings so calls like
 		// KeyManager::SetForceFeedback can safely read configuration values.
@@ -651,6 +693,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 	RETRO_API void retro_deinit()
 	{
+		_videoFilter.reset();
 		if(_keyManager) _keyManager->SetSupportsInputBitmasks(false);
 	// Unregister the key manager from the global KeyManager to avoid a
 	// dangling pointer during emulator shutdown. KeyManager::RegisterKeyManager
@@ -699,10 +742,10 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		// Core Options v2: Definitions
 		static const retro_core_option_v2_definition option_defs[] = {
 			// System category
-			{ MesenRegion, "System - Region", "Region", "Select NES region", NULL, "system",
+			{ MesenRegion, "System - Region (restart required)", "Region", "Select NES region", NULL, "system",
 				{{ "Auto", "Auto" }, { "NTSC", "NTSC" }, { "PAL", "PAL" }, { "Dendy", "Dendy" }, { NULL, NULL }},
 				"Auto" },
-			{ MesenRamState, "System - RAM Power-On State", "RAM Power-On State", "Default power-on state for RAM", NULL, "system",
+			{ MesenRamState, "System - RAM Power-On State (restart required)", "RAM Power-On State", "Default power-on state for RAM", NULL, "system",
 				{{ "All 0s (Default)", "All 0s" }, { "All 1s", "All 1s" }, { "Random Values", "Random" }, { NULL, NULL }},
 				"All 0s (Default)" },
 			{ MesenSortSavesBySystem, "System - Sort Saves by System", "Sort Saves by System", "Store saves in system-specific subfolders. Restart the core for changes to take effect; existing saves are not moved.", NULL, "system",
@@ -714,45 +757,43 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenOverclockType, "System - Overclock Type", "Overclock Type", "When to apply overclock", NULL, "system",
 				{{ "Before NMI (Recommended)", "Before NMI" }, { "After NMI", "After NMI" }, { NULL, NULL }},
 				"Before NMI (Recommended)" },
-			{ MesenFdsAutoSelectDisk, "System - FDS Auto Insert Disk", "FDS Auto Insert", "Automatically insert disks on FDS games", NULL, "system",
+			{ MesenFdsAutoSelectDisk, "System - FDS Auto Insert Disk (restart required)", "FDS Auto Insert", "Automatically insert disks on FDS games", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenFdsFastForwardLoad, "System - FDS Fast Forward On Load", "FDS Fast Forward", "Fast forward while FDS is loading", NULL, "system",
+			{ MesenFdsFastForwardLoad, "System - FDS Fast Forward On Load (restart required)", "FDS Fast Forward", "Fast forward while FDS is loading", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 			{ MesenAllowInvalidInput, "System - Allow Invalid Input", "Allow Invalid Input", "Allow invalid input combinations", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenRandomizeMapperPowerOnState, "System - Randomize Mapper Power-On State", "Randomize Mapper Power-On", "Randomize mapper power-on state (for testing)", NULL, "system",
+			{ MesenRandomizeMapperPowerOnState, "System - Randomize Mapper Power-On State (restart required)", "Randomize Mapper Power-On", "Randomize mapper power-on state (for testing)", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenRandomizeCpuPpuAlignment, "System - Randomize CPU/PPU Alignment", "Randomize CPU/PPU Alignment", "Randomize CPU/PPU alignment (for testing)", NULL, "system",
+			{ MesenRandomizeCpuPpuAlignment, "System - Randomize CPU/PPU Alignment (restart required)", "Randomize CPU/PPU Alignment", "Randomize CPU/PPU alignment (for testing)", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 
 			// Video category
 			{ MesenPalette, "Video - Palette", "Palette", "Select color palette", NULL, "video",
-			// TODO:FIXME RAW palette doesn't work
-				{{ "Default", "Default" }, { "Composite Direct (by FirebrandX)", }, { "Nes Classic", "NES Classic" }, { "Nestopia (RGB)", "Nestopia RGB" }, { "Original Hardware (by FirebrandX)", "Original Hardware" }, { "PVM Style (by FirebrandX)", "PVM Style" }, { "Sony CXA2025AS", "Sony CXA2025AS" }, { "Unsaturated v6 (by FirebrandX)", "Unsaturated v6" }, { "YUV v3 (by FirebrandX)", "YUV v3" }, { "Wavebeam (by nakedarthur)", "Wavebeam" }, { "Custom", "Custom" }, /*{ "Raw", "Raw" },*/ { NULL, NULL }},
+				{{ "Default", "Default" }, { "Composite Direct (by FirebrandX)", }, { "Nes Classic", "NES Classic" }, { "Nestopia (RGB)", "Nestopia RGB" }, { "Original Hardware (by FirebrandX)", "Original Hardware" }, { "PVM Style (by FirebrandX)", "PVM Style" }, { "Sony CXA2025AS", "Sony CXA2025AS" }, { "Unsaturated v6 (by FirebrandX)", "Unsaturated v6" }, { "YUV v3 (by FirebrandX)", "YUV v3" }, { "Wavebeam (by nakedarthur)", "Wavebeam" }, { "Custom", "Custom" }, { "Raw", "Raw" }, { NULL, NULL }},
 				"Default" },	
 			// TODO:FIXME the commented NTSC filters don't work	
 			{ MesenNtscFilter, "Video - NTSC Filter", "NTSC Filter", "NTSC video filter", NULL, "video",
 				{{ "Disabled", "Disabled" }, { "Composite (Blargg)", "Composite (Blargg)" }, /*{ "S-Video (Blargg)", "S-Video (Blargg)" }, { "RGB (Blargg)", "RGB (Blargg)" }, { "Monochrome (Blargg)", "Monochrome (Blargg)" }, { "Bisqwit 2x", "Bisqwit 2x" }, { "Bisqwit 4x", "Bisqwit 4x" }, { "Bisqwit 8x", "Bisqwit 8x" },*/ { NULL, NULL }},
 				"Disabled" },
-		   // TODO:FIXME overscan cropping and AR options don't work
-/*			{ MesenOverscanLeft, "Video - Overscan Left", "Overscan Left", "Left overscan", NULL, "video",
+			{ MesenOverscanLeft, "Video - Overscan Left", "Overscan Left", "Crop pixels from the left edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenOverscanRight, "Video - Overscan Right", "Overscan Right", "Right overscan", NULL, "video",
+			{ MesenOverscanRight, "Video - Overscan Right", "Overscan Right", "Crop pixels from the right edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenOverscanTop, "Video - Overscan Top", "Overscan Top", "Top overscan", NULL, "video",
+			{ MesenOverscanTop, "Video - Overscan Top", "Overscan Top", "Crop pixels from the top edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenOverscanBottom, "Video - Overscan Bottom", "Overscan Bottom", "Bottom overscan", NULL, "video",
+			{ MesenOverscanBottom, "Video - Overscan Bottom", "Overscan Bottom", "Crop pixels from the bottom edge", NULL, "video",
 				{{ "None", "None" }, { "4px", "4px" }, { "8px", "8px" }, { "12px", "12px" }, { "16px", "16px" }, { NULL, NULL }},
 				"None" },
-			{ MesenAspectRatio, "Video - Aspect Ratio", "Aspect Ratio", "Display aspect ratio", NULL, "video",
+/*			{ MesenAspectRatio, "Video - Aspect Ratio", "Aspect Ratio", "Display aspect ratio", NULL, "video",
 				{{ "Auto", "Auto" }, { "No Stretching", "No Stretching" }, { "NTSC", "NTSC" }, { "PAL", "PAL" }, { "4:3", "4:3" }, { "4:3 (Preserved)", "4:3 (Preserved)" }, { "16:9", "16:9" }, { "16:9 (Preserved)", "16:9 (Preserved)" }, { NULL, NULL }},
 				"Auto" },
 			{ MesenScreenRotation, "Video - Screen Rotation", "Screen Rotation", "Rotate screen display", NULL, "video",
@@ -817,15 +858,15 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenSnesDisableFrameSkipping, "System - SNES Disable Frame Skipping", "Disable Frame Skipping", "Disable SNES frame skipping", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenSnesEnableStrictBoardMappings, "System - SNES Strict Board Mappings", "Strict Board Mappings", "Use strict SNES board mappings", NULL, "system",
+			{ MesenSnesEnableStrictBoardMappings, "System - SNES Strict Board Mappings (restart required)", "Strict Board Mappings", "Use strict SNES board mappings", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenSnesRandomizePowerOnState, "System - SNES Randomize Power-On State", "Randomize Power-On", "Randomize the SNES power-on state", NULL, "system",
+			{ MesenSnesRandomizePowerOnState, "System - SNES Randomize Power-On State (restart required)", "Randomize Power-On", "Randomize the SNES power-on state", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 
 			// Game Boy options
-			{ MesenGameboyModel, "System - Game Boy Model", "Game Boy Model", "Select the Game Boy model to emulate", NULL, "system",
+			{ MesenGameboyModel, "System - Game Boy Model (restart required)", "Game Boy Model", "Select the Game Boy model to emulate", NULL, "system",
 				{{ "Auto (Best)", "Auto (Best)" }, { "Auto (GBC)", "Auto (GBC)" }, { "Auto (SGB)", "Auto (SGB)" }, { "Auto (GB)", "Auto (GB)" }, { "Game Boy", "Game Boy" }, { "Game Boy Color", "Game Boy Color" }, { "Super Game Boy", "Super Game Boy" }, { NULL, NULL }},
 				"Auto (GBC)" },
 			{ MesenGameboyBlendFrames, "Video - Game Boy Blend Frames", "Blend Frames", "Blend Game Boy frames for a smoother image", NULL, "video",
@@ -848,7 +889,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 				"disabled" },
 
 			// GBA options
-			{ MesenGbaSkipBootScreen, "System - GBA Skip Boot Screen", "Skip Boot Screen", "Skip the GBA boot screen", NULL, "system",
+			{ MesenGbaSkipBootScreen, "System - GBA Skip Boot Screen (restart required)", "Skip Boot Screen", "Skip the GBA boot screen", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
 			{ MesenGbaBlendFrames, "Video - GBA Blend Frames", "Blend Frames", "Blend GBA frames", NULL, "video",
@@ -878,18 +919,18 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenGbaDisableFrameSkipping, "System - GBA Disable Frame Skipping", "Disable Frame Skipping", "Disable GBA frame skipping", NULL, "system",
 				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
 				"disabled" },
-			{ MesenGbaSaveType, "System - GBA Save Type", "Save Type", "Select the GBA save type", NULL, "system",
+			{ MesenGbaSaveType, "System - GBA Save Type (restart required)", "Save Type", "Select the GBA save type", NULL, "system",
 				{{ "Auto Detect", "Auto Detect" }, { "None", "None" }, { "SRAM", "SRAM" }, { "EEPROM 512", "EEPROM 512" }, { "EEPROM 8192", "EEPROM 8192" }, { "Flash 64", "Flash 64" }, { "Flash 128", "Flash 128" }, { NULL, NULL }},
 				"Auto Detect" },
-			{ MesenGbaRtcType, "System - GBA RTC Type", "RTC Type", "Select the GBA RTC emulation mode", NULL, "system",
+			{ MesenGbaRtcType, "System - GBA RTC Type (restart required)", "RTC Type", "Select the GBA RTC emulation mode", NULL, "system",
 				{{ "Auto Detect", "Auto Detect" }, { "Enabled", "Enabled" }, { "Disabled", "Disabled" }, { NULL, NULL }},
 				"Auto Detect" },
 
 			// PC Engine options
-			{ MesenPceConsoleType, "System - PCE Console Type", "Console Type", "Select the PC Engine console model", NULL, "system",
+			{ MesenPceConsoleType, "System - PCE Console Type (restart required)", "Console Type", "Select the PC Engine console model", NULL, "system",
 				{{ "Auto", "Auto" }, { "PC Engine", "PC Engine" }, { "SuperGrafx", "SuperGrafx" }, { "TurboGrafx", "TurboGrafx" }, { NULL, NULL }},
 				"Auto" },
-			{ MesenPceCdRomType, "System - PCE CD-ROM Type", "CD-ROM Type", "Select the PCE CD-ROM emulation type", NULL, "system",
+			{ MesenPceCdRomType, "System - PCE CD-ROM Type (restart required)", "CD-ROM Type", "Select the PCE CD-ROM emulation type", NULL, "system",
 				{{ "CD-ROM", "CD-ROM" }, { "Super CD-ROM", "Super CD-ROM" }, { "Arcade", "Arcade" }, { NULL, NULL }},
 				"Arcade" },
 			{ MesenPceDisableSprites, "Enhancements - PCE Disable Sprites", "Disable Sprites", "Disable sprite rendering on PCE", NULL, "enhancements",
@@ -938,7 +979,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 				"enabled" },
 
 			// WonderSwan options
-			{ MesenWsModel, "System - WS Model", "Model", "Select the WonderSwan model", NULL, "system",
+			{ MesenWsModel, "System - WS Model (restart required)", "Model", "Select the WonderSwan model", NULL, "system",
 				{{ "Auto", "Auto" }, { "Monochrome", "Monochrome" }, { "Color", "Color" }, { "SwanCrystal", "SwanCrystal" }, { "PocketChallenge", "PocketChallenge" }, { NULL, NULL }},
 				"Auto" },
 			{ MesenWsAutoRotate, "Video - WS Auto Rotate", "Auto Rotate", "Rotate the WonderSwan display automatically", NULL, "video",
@@ -1170,6 +1211,7 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API void retro_reset()
 	{
+		_videoFilter.reset();
 		// Reset signature changed — call parameterless Reset if available
 		_console->Reset();
 	}
@@ -1242,14 +1284,88 @@ void libretro_probe_inputs(const char* tag)
 		}
 	}
 
+	static FrameInfo apply_raw_palette(
+		uint16_t* src,
+		uint32_t width,
+		uint32_t height,
+		OverscanDimensions overscan,
+		std::vector<uint32_t>& outBuffer)
+	{
+		uint32_t left = std::min(overscan.Left, width);
+		uint32_t right = std::min(overscan.Right, width - left);
+		uint32_t top = std::min(overscan.Top, height);
+		uint32_t bottom = std::min(overscan.Bottom, height - top);
+		uint32_t outputWidth = width - left - right;
+		uint32_t outputHeight = height - top - bottom;
+		outBuffer.resize((size_t)outputWidth * outputHeight);
+
+		size_t outputIndex = 0;
+		for(uint32_t y = top; y < height - bottom; ++y) {
+			for(uint32_t x = left; x < width - right; ++x) {
+				uint16_t color = src[(size_t)y * width + x] & 0x01FF;
+				uint32_t red = (color & 0x0F) * 255 / 15;
+				uint32_t green = ((color >> 4) & 0x03) * 255 / 3;
+				uint32_t blue = ((color >> 6) & 0x07) * 255 / 7;
+				outBuffer[outputIndex++] = (red << 16) | (green << 8) | blue;
+			}
+		}
+		return { outputWidth, outputHeight };
+	}
+
 	void update_settings()
 	{
+		_videoFilter.reset();
 		struct retro_variable var = { };
 		NesConfig nesCfg = _emu->GetSettings()->GetNesConfig();
+		SnesConfig snesCfg = _emu->GetSettings()->GetSnesConfig();
 		VideoConfig videoCfg = _emu->GetSettings()->GetVideoConfig();
 		AudioConfig audioCfg = _emu->GetSettings()->GetAudioConfig();
+		GameboyConfig gameboyCfg = _emu->GetSettings()->GetGameboyConfig();
+		GbaConfig gbaCfg = _emu->GetSettings()->GetGbaConfig();
+		PcEngineConfig pceCfg = _emu->GetSettings()->GetPcEngineConfig();
+		SmsConfig smsCfg = _emu->GetSettings()->GetSmsConfig();
+		WsConfig wsCfg = _emu->GetSettings()->GetWsConfig();
 
 		// ===== SYSTEM SETTINGS =====
+
+		// Game Boy Model
+		if(readVariable(MesenGameboyModel, var)) {
+			string value = string(var.value);
+			if(value == "Auto (Best)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorBest;
+			} else if(value == "Auto (GBC)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorGbc;
+			} else if(value == "Auto (SGB)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorSgb;
+			} else if(value == "Auto (GB)") {
+				gameboyCfg.Model = GameboyModel::AutoFavorGb;
+			} else if(value == "Game Boy") {
+				gameboyCfg.Model = GameboyModel::Gameboy;
+			} else if(value == "Game Boy Color") {
+				gameboyCfg.Model = GameboyModel::GameboyColor;
+			} else if(value == "Super Game Boy") {
+				gameboyCfg.Model = GameboyModel::SuperGameboy;
+			}
+		}
+
+		if(readVariable(MesenGameboyBlendFrames, var)) {
+			gameboyCfg.BlendFrames = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyAdjustColors, var)) {
+			gameboyCfg.GbcAdjustColors = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyDisableBackground, var)) {
+			gameboyCfg.DisableBackground = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyDisableSprites, var)) {
+			gameboyCfg.DisableSprites = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyRemoveSpriteLimit, var)) {
+			gameboyCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGameboyHideSgbBorders, var)) {
+			gameboyCfg.HideSgbBorders = (string(var.value) == "enabled");
+		}
 		
 		// Region
 		if(readVariable(MesenRegion, var)) {
@@ -1316,9 +1432,169 @@ void libretro_probe_inputs(const char* tag)
 		}
 
 		// ===== VIDEO SETTINGS =====
+
+		// SNES layer and sprite enhancements
+		if(readVariable(MesenSnesHideBgLayer1, var)) {
+			snesCfg.HideBgLayer1 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideBgLayer2, var)) {
+			snesCfg.HideBgLayer2 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideBgLayer3, var)) {
+			snesCfg.HideBgLayer3 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideBgLayer4, var)) {
+			snesCfg.HideBgLayer4 = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesHideSprites, var)) {
+			snesCfg.HideSprites = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesRemoveSpriteLimit, var)) {
+			snesCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesColorCorrection, var)) {
+			string value = string(var.value);
+			if(value == "NTSC Black Level") {
+				snesCfg.ColorCorrection = SnesColorCorrectionMode::NtscBlackLevel;
+			} else if(value == "Deep Black Boost") {
+				snesCfg.ColorCorrection = SnesColorCorrectionMode::DeepBlackBoost;
+			} else {
+				snesCfg.ColorCorrection = SnesColorCorrectionMode::None;
+			}
+		}
+		if(readVariable(MesenSnesHighResBlendMode, var)) {
+			string value = string(var.value);
+			if(value == "Blend All") {
+				snesCfg.HighResBlendMode = SnesHighResBlendMode::BlendAll;
+			} else if(value == "Blend Even/Odd") {
+				snesCfg.HighResBlendMode = SnesHighResBlendMode::BlendEvenOdd;
+			} else {
+				snesCfg.HighResBlendMode = SnesHighResBlendMode::None;
+			}
+		}
+		if(readVariable(MesenSnesDeinterlaceMode, var)) {
+			string value = string(var.value);
+			if(value == "Bob Blend") {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::BobBlend;
+			} else if(value == "Bob") {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::Bob;
+			} else if(value == "Current Field") {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::CurrentField;
+			} else {
+				snesCfg.DeinterlaceMode = SnesDeinterlaceMode::Weave;
+			}
+		}
+		if(readVariable(MesenSnesForceFixedResolution, var)) {
+			snesCfg.ForceFixedResolution = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesDisableFrameSkipping, var)) {
+			snesCfg.DisableFrameSkipping = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesEnableStrictBoardMappings, var)) {
+			snesCfg.EnableStrictBoardMappings = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenSnesRandomizePowerOnState, var)) {
+			snesCfg.EnableRandomPowerOnState = (string(var.value) == "enabled");
+		}
+
+		if(readVariable(MesenGbaSkipBootScreen, var)) {
+			gbaCfg.SkipBootScreen = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaBlendFrames, var)) {
+			gbaCfg.BlendFrames = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaAdjustColors, var)) {
+			gbaCfg.GbaAdjustColors = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaDisableSprites, var)) {
+			gbaCfg.DisableSprites = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaDisableBackground, var)) {
+			gbaCfg.HideBgLayers[0] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer1, var)) {
+			gbaCfg.HideBgLayers[0] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer2, var)) {
+			gbaCfg.HideBgLayers[1] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer3, var)) {
+			gbaCfg.HideBgLayers[2] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaHideBgLayer4, var)) {
+			gbaCfg.HideBgLayers[3] = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaDisableBackground, var) && string(var.value) == "enabled") {
+			for(bool& hidden : gbaCfg.HideBgLayers) {
+				hidden = true;
+			}
+		}
+		if(readVariable(MesenGbaDisableFrameSkipping, var)) {
+			gbaCfg.DisableFrameSkipping = (string(var.value) == "enabled");
+		}
+		if(readVariable(MesenGbaSaveType, var)) {
+			string value = string(var.value);
+			if(value == "None") gbaCfg.SaveType = GbaSaveType::None;
+			else if(value == "SRAM") gbaCfg.SaveType = GbaSaveType::Sram;
+			else if(value == "EEPROM 512") gbaCfg.SaveType = GbaSaveType::Eeprom512;
+			else if(value == "EEPROM 8192") gbaCfg.SaveType = GbaSaveType::Eeprom8192;
+			else if(value == "Flash 64") gbaCfg.SaveType = GbaSaveType::Flash64;
+			else if(value == "Flash 128") gbaCfg.SaveType = GbaSaveType::Flash128;
+			else gbaCfg.SaveType = GbaSaveType::AutoDetect;
+		}
+		if(readVariable(MesenGbaRtcType, var)) {
+			string value = string(var.value);
+			gbaCfg.RtcType = value == "Enabled" ? GbaRtcType::Enabled :
+				value == "Disabled" ? GbaRtcType::Disabled : GbaRtcType::AutoDetect;
+		}
+
+		if(readVariable(MesenPceConsoleType, var)) {
+			string value = string(var.value);
+			if(value == "PC Engine") pceCfg.ConsoleType = PceConsoleType::PcEngine;
+			else if(value == "SuperGrafx") pceCfg.ConsoleType = PceConsoleType::SuperGrafx;
+			else if(value == "TurboGrafx") pceCfg.ConsoleType = PceConsoleType::TurboGrafx;
+			else pceCfg.ConsoleType = PceConsoleType::Auto;
+		}
+		if(readVariable(MesenPceCdRomType, var)) {
+			string value = string(var.value);
+			if(value == "CD-ROM") pceCfg.CdRomType = PceCdRomType::CdRom;
+			else if(value == "Super CD-ROM") pceCfg.CdRomType = PceCdRomType::SuperCdRom;
+			else pceCfg.CdRomType = PceCdRomType::Arcade;
+		}
+		if(readVariable(MesenPceDisableSprites, var)) pceCfg.DisableSprites = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableSpritesVdc2, var)) pceCfg.DisableSpritesVdc2 = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableBackground, var)) pceCfg.DisableBackground = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableBackgroundVdc2, var)) pceCfg.DisableBackgroundVdc2 = (string(var.value) == "enabled");
+		if(readVariable(MesenPceRemoveSpriteLimit, var)) pceCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		if(readVariable(MesenPceDisableFrameSkipping, var)) pceCfg.DisableFrameSkipping = (string(var.value) == "enabled");
+		if(readVariable(MesenPceForceFixedResolution, var)) pceCfg.ForceFixedResolution = (string(var.value) == "enabled");
+		if(readVariable(MesenPceUseHuc6280Audio, var)) pceCfg.UseHuC6280aAudio = (string(var.value) == "enabled");
+
+		if(readVariable(MesenSmsUseSgPalette, var)) smsCfg.UseSgPalette = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsGameGearBlendFrames, var)) smsCfg.GgBlendFrames = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsDisableSprites, var)) smsCfg.DisableSprites = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsDisableBackground, var)) smsCfg.DisableBackground = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsRemoveSpriteLimit, var)) smsCfg.RemoveSpriteLimit = (string(var.value) == "enabled");
+		if(readVariable(MesenSmsFmAudio, var)) smsCfg.EnableFmAudio = (string(var.value) == "enabled");
+
+		if(readVariable(MesenWsModel, var)) {
+			string value = string(var.value);
+			if(value == "Monochrome") wsCfg.Model = WsModel::Monochrome;
+			else if(value == "Color") wsCfg.Model = WsModel::Color;
+			else if(value == "SwanCrystal") wsCfg.Model = WsModel::SwanCrystal;
+			else if(value == "PocketChallenge") wsCfg.Model = WsModel::PocketChallenge;
+			else wsCfg.Model = WsModel::Auto;
+		}
+		if(readVariable(MesenWsAutoRotate, var)) wsCfg.AutoRotate = (string(var.value) == "enabled");
+		if(readVariable(MesenWsBlendFrames, var)) wsCfg.BlendFrames = (string(var.value) == "enabled");
+		if(readVariable(MesenWsLcdAdjustColors, var)) wsCfg.LcdAdjustColors = (string(var.value) == "enabled");
+		if(readVariable(MesenWsLcdShowIcons, var)) wsCfg.LcdShowIcons = (string(var.value) == "enabled");
+		if(readVariable(MesenWsAudioMode, var)) wsCfg.AudioMode = string(var.value) == "Speakers" ? WsAudioMode::Speakers : WsAudioMode::Headphones;
+		if(readVariable(MesenWsDisableSprites, var)) wsCfg.DisableSprites = (string(var.value) == "enabled");
 		
 		// Palette
 		if(readVariable(MesenPalette, var)) {
+			_videoFilterRaw = false;
 			string value = string(var.value);
 			if(value == "Default") {
 				_userRgbPalette.assign(std::begin(defaultPalette), std::end(defaultPalette));
@@ -1387,15 +1663,36 @@ void libretro_probe_inputs(const char* tag)
 				videoCfg.NtscScale = NtscBisqwitFilterScale::_8x;
 			}*/
 		}
-/*
 		// Overscan
-		nesCfg.NtscOverscan.Left = readOverscanValue(MesenOverscanLeft);
-		nesCfg.NtscOverscan.Right = readOverscanValue(MesenOverscanRight);
-		nesCfg.NtscOverscan.Top = readOverscanValue(MesenOverscanTop);
-		nesCfg.NtscOverscan.Bottom = readOverscanValue(MesenOverscanBottom);
-		// Use same overscan for PAL
-		nesCfg.PalOverscan = nesCfg.NtscOverscan;
+		OverscanDimensions overscanDimensions = {
+			readOverscanValue(MesenOverscanLeft),
+			readOverscanValue(MesenOverscanRight),
+			readOverscanValue(MesenOverscanTop),
+			readOverscanValue(MesenOverscanBottom)
+		};
+		switch(_emu->GetConsoleType()) {
+			case ConsoleType::Nes:
+				nesCfg.NtscOverscan = overscanDimensions;
+				nesCfg.PalOverscan = overscanDimensions;
+				break;
+			case ConsoleType::Snes:
+				snesCfg.Overscan = overscanDimensions;
+				break;
+			case ConsoleType::PcEngine:
+				pceCfg.Overscan = overscanDimensions;
+				break;
+			case ConsoleType::Sms:
+				smsCfg.NtscOverscan = overscanDimensions;
+				smsCfg.PalOverscan = overscanDimensions;
+				smsCfg.GameGearOverscan = overscanDimensions;
+				break;
+			case ConsoleType::Gameboy:
+			case ConsoleType::Gba:
+			case ConsoleType::Ws:
+				break;
+		}
 
+/*
 		// Aspect Ratio
 		if(readVariable(MesenAspectRatio, var)) {
 			_selectedAspectRatio = std::string(var.value ? var.value : "");
@@ -1450,12 +1747,16 @@ void libretro_probe_inputs(const char* tag)
 		}
 
 		// Audio Sample Rate
+		audioCfg.SampleRate = _audioSampleRate;
 		if(readVariable(MesenAudioSampleRate, var)) {
-			int old_value = audioCfg.SampleRate;
-			audioCfg.SampleRate = atoi(var.value);
-			audioCfg.SampleRate = (audioCfg.SampleRate > 96000) ? 96000 : audioCfg.SampleRate;
+			int requestedRate = atoi(var.value);
+			if(requestedRate == 11025 || requestedRate == 22050 || requestedRate == 44100 ||
+				requestedRate == 48000 || requestedRate == 96000) {
+				audioCfg.SampleRate = requestedRate;
+			}
 
-			if(old_value != audioCfg.SampleRate) {
+			if(_audioSampleRate != (int32_t)audioCfg.SampleRate) {
+				_audioSampleRate = (int32_t)audioCfg.SampleRate;
 				// If core is running, notify frontend of geometry change
 				if(_saveStateSize != -1) {
 					struct retro_system_av_info system_av_info;
@@ -1523,6 +1824,16 @@ void libretro_probe_inputs(const char* tag)
 		nesCfg.Port1SubPorts[2].Keys = getKeyBindings(2);
 		nesCfg.Port1SubPorts[3].Keys = getKeyBindings(3);
 		nesCfg.ExpPort.Keys = getKeyBindings(4);
+		snesCfg.Port1.Keys.TurboSpeed = turboSpeed;
+		snesCfg.Port2.Keys.TurboSpeed = turboSpeed;
+		gameboyCfg.Controller.Keys.TurboSpeed = turboSpeed;
+		gbaCfg.Controller.Keys.TurboSpeed = turboSpeed;
+		pceCfg.Port1.Keys.TurboSpeed = turboSpeed;
+		smsCfg.Port1.Keys.TurboSpeed = turboSpeed;
+		smsCfg.Port2.Keys.TurboSpeed = turboSpeed;
+		wsCfg.ControllerHorizontal.Keys.TurboSpeed = turboSpeed;
+		wsCfg.ControllerVertical.Keys.TurboSpeed = turboSpeed;
+		wsCfg.ControllerPcv2.Keys.TurboSpeed = turboSpeed;
 
 		// ===== ENHANCEMENTS =====
 		
@@ -1585,21 +1896,24 @@ void libretro_probe_inputs(const char* tag)
 		// ===== APPLY ALL SETTINGS =====
 		
 		_emu->GetSettings()->SetNesConfig(nesCfg);
+		_emu->GetSettings()->SetSnesConfig(snesCfg);
 		_emu->GetSettings()->SetVideoConfig(videoCfg);
 		_emu->GetSettings()->SetAudioConfig(audioCfg);
+		_emu->GetSettings()->SetGameboyConfig(gameboyCfg);
+		_emu->GetSettings()->SetGbaConfig(gbaCfg);
+		_emu->GetSettings()->SetPcEngineConfig(pceCfg);
+		_emu->GetSettings()->SetSmsConfig(smsCfg);
+		_emu->GetSettings()->SetWsConfig(wsCfg);
 
 		// Check if geometry-related settings changed
 		bool videoFilterChanged = (_lastVideoConfig.VideoFilter != videoCfg.VideoFilter) ||
 			(_lastVideoConfig.NtscScale != videoCfg.NtscScale) ||
 			(_lastVideoConfig.ScreenRotation != videoCfg.ScreenRotation);
-		bool overscanChanged = (nesCfg.NtscOverscan.Left != _lastNesConfig.NtscOverscan.Left) ||
-			(nesCfg.NtscOverscan.Right != _lastNesConfig.NtscOverscan.Right) ||
-			(nesCfg.NtscOverscan.Top != _lastNesConfig.NtscOverscan.Top) ||
-			(nesCfg.NtscOverscan.Bottom != _lastNesConfig.NtscOverscan.Bottom) ||
-			(nesCfg.PalOverscan.Left != _lastNesConfig.PalOverscan.Left) ||
-			(nesCfg.PalOverscan.Right != _lastNesConfig.PalOverscan.Right) ||
-			(nesCfg.PalOverscan.Top != _lastNesConfig.PalOverscan.Top) ||
-			(nesCfg.PalOverscan.Bottom != _lastNesConfig.PalOverscan.Bottom);
+		OverscanDimensions overscan = _emu->GetSettings()->GetOverscan();
+		bool overscanChanged = (overscan.Left != _lastOverscan.Left) ||
+			(overscan.Right != _lastOverscan.Right) ||
+			(overscan.Top != _lastOverscan.Top) ||
+			(overscan.Bottom != _lastOverscan.Bottom);
 
 		if(videoFilterChanged || overscanChanged) {
 			_geometryDirty = true;
@@ -1610,7 +1924,7 @@ void libretro_probe_inputs(const char* tag)
 
 		// Save current settings for next comparison
 		_lastVideoConfig = videoCfg;
-		_lastNesConfig = nesCfg;
+		_lastOverscan = overscan;
 	}
 
 	RETRO_API void retro_run()
@@ -1662,56 +1976,74 @@ void libretro_probe_inputs(const char* tag)
 			PpuFrameInfo frame = _emu->GetPpuFrame();
 			// Check that we have a valid buffer with meaningful size (each system allocates differently)
 			if(_videoRefresh && frame.FrameBuffer && frame.FrameBufferSize > 0) {
-				// Create a temporary video filter (same pattern used by LuaApi)
-				std::unique_ptr<BaseVideoFilter> filter(_emu->GetVideoFilter());
-				FrameInfo baseSize = { frame.Width, frame.Height };
-				filter->SetBaseFrameInfo(baseSize);
-				FrameInfo outInfo = filter->SendFrame((uint16_t*)frame.FrameBuffer, _emu->GetFrameCount(), _emu->GetFrameCount() & 0x01, nullptr, false);
+				std::vector<uint32_t> rawFrameBuffer;
+				uint32_t* src = nullptr;
+				FrameInfo outInfo = { frame.Width, frame.Height };
+				size_t pixels = 0;
 
-				uint32_t* src = filter->GetOutputBuffer();
+				if(_videoFilterRaw && consoleIf->GetConsoleType() == ConsoleType::Nes) {
+					outInfo = apply_raw_palette(
+						(uint16_t*)frame.FrameBuffer,
+						frame.Width,
+						frame.Height,
+						_emu->GetSettings()->GetOverscan(),
+						rawFrameBuffer);
+					pixels = (size_t)outInfo.Width * outInfo.Height;
+					src = rawFrameBuffer.data();
+				} else {
+					if(!_videoFilter) {
+						_videoFilter.reset(_emu->GetVideoFilter());
+					}
+					FrameInfo baseSize = { frame.Width, frame.Height };
+					_videoFilter->SetBaseFrameInfo(baseSize);
+					RenderedFrame renderedFrame(frame.FrameBuffer, frame.Width, frame.Height, 1.0, frame.FrameCount);
+					outInfo = _videoFilter->SendFrame((uint16_t*)frame.FrameBuffer, frame.FrameCount, frame.FrameCount & 0x01, nullptr, true, renderedFrame);
+					src = _videoFilter->GetOutputBuffer();
+					pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
+				}
+
 				// Ensure we have valid output before displaying
 				if(src) {
-					size_t pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
+					unsigned outW = outInfo.Width;
+					unsigned outH = outInfo.Height;
 
-					static std::vector<uint32_t> rotBuffer;
-
-					if(_screenRotation == 0) {
-						_videoRefresh(src, outInfo.Width, outInfo.Height, outInfo.Width * 4);
-					} else {
-						int outW = (_screenRotation == 180) ? outInfo.Width : outInfo.Height;
-						int outH = (_screenRotation == 180) ? outInfo.Height : outInfo.Width;
-						rotBuffer.resize((size_t)outW * (size_t)outH);
-
-						if(_screenRotation == 180) {
-							for(size_t i = 0; i < pixels; ++i) rotBuffer[pixels - 1 - i] = src[i];
-							_videoRefresh(rotBuffer.data(), outInfo.Width, outInfo.Height, outInfo.Width * 4);
-						} else if(_screenRotation == 90) {
-							for(int y = 0; y < outInfo.Height; ++y) {
-								for(int x = 0; x < outInfo.Width; ++x) {
-									size_t srcIdx = (size_t)y * outInfo.Width + x;
-									int dstX = outInfo.Height - 1 - y;
-									int dstY = x;
-									size_t dstIdx = (size_t)dstY * outW + (size_t)dstX;
-									rotBuffer[dstIdx] = src[srcIdx];
-								}
-							}
-							_videoRefresh(rotBuffer.data(), outW, outH, outW * 4);
-						} else if(_screenRotation == 270) {
-							for(int y = 0; y < outInfo.Height; ++y) {
-								for(int x = 0; x < outInfo.Width; ++x) {
-									size_t srcIdx = (size_t)y * outInfo.Width + x;
-									int dstX = y;
-									int dstY = outInfo.Width - 1 - x;
-									size_t dstIdx = (size_t)dstY * outW + (size_t)dstX;
-									rotBuffer[dstIdx] = src[srcIdx];
-								}
-							}
-							_videoRefresh(rotBuffer.data(), outW, outH, outW * 4);
-						} else {
-							// Unknown rotation: fallback to non-rotated output
-							_videoRefresh(src, outInfo.Width, outInfo.Height, outInfo.Width * 4);
-						}
+					if(_screenRotation == 90 || _screenRotation == 270) {
+						outW = outInfo.Height;
+						outH = outInfo.Width;
 					}
+
+					// Keep callback data alive independently of the filter.
+					_videoFrameBuffer.resize((size_t)outW * outH);
+					if(_screenRotation == 180) {
+						for(size_t i = 0; i < pixels; ++i) {
+							_videoFrameBuffer[pixels - 1 - i] = src[i];
+						}
+					} else if(_screenRotation == 90) {
+						for(unsigned y = 0; y < outInfo.Height; ++y) {
+							for(unsigned x = 0; x < outInfo.Width; ++x) {
+								size_t srcIdx = (size_t)y * outInfo.Width + x;
+								unsigned dstX = outInfo.Height - 1 - y;
+								unsigned dstY = x;
+								size_t dstIdx = (size_t)dstY * outW + dstX;
+								_videoFrameBuffer[dstIdx] = src[srcIdx];
+							}
+						}
+					} else if(_screenRotation == 270) {
+						for(unsigned y = 0; y < outInfo.Height; ++y) {
+							for(unsigned x = 0; x < outInfo.Width; ++x) {
+								size_t srcIdx = (size_t)y * outInfo.Width + x;
+								unsigned dstX = y;
+								unsigned dstY = outInfo.Width - 1 - x;
+								size_t dstIdx = (size_t)dstY * outW + dstX;
+								_videoFrameBuffer[dstIdx] = src[srcIdx];
+							}
+						}
+					} else {
+						// Unknown rotation: fallback to non-rotated output.
+						std::copy(src, src + pixels, _videoFrameBuffer.begin());
+					}
+
+					_videoRefresh(_videoFrameBuffer.data(), outW, outH, outW * 4);
 				}
 			}
 		}
@@ -1749,7 +2081,10 @@ void libretro_probe_inputs(const char* tag)
 			std::stringstream ss;
 			_emu->Serialize(ss, true, 1);
 			std::string out = ss.str();
-			if(out.size() > size) return false;
+			if(out.size() > size) {
+				logMessage(RETRO_LOG_ERROR, "retro_serialize: serialized state exceeds the frontend buffer.\n");
+				return false;
+			}
 			memcpy(data, out.data(), out.size());
 			return true;
 		} catch(...) {
@@ -1764,6 +2099,9 @@ void libretro_probe_inputs(const char* tag)
 			std::string in((const char*)data, size);
 			std::stringstream ss(in);
 			auto res = _emu->Deserialize(ss, SaveStateManager::FileFormatVersion, true);
+			if(res == DeserializeResult::Success) {
+				_videoFilter.reset();
+			}
 			return (res == DeserializeResult::Success);
 		} catch(...) {
 			return false;
@@ -2268,6 +2606,7 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API bool retro_load_game(const struct retro_game_info *game)
 	{
+		_videoFilter.reset();
 		logSgbDebugf("retro_load_game called: path=%s", game && game->path ? game->path : "(null)");
 		char *saveFolder = nullptr;
 		char *systemFolder = nullptr;
@@ -2440,32 +2779,12 @@ void libretro_probe_inputs(const char* tag)
 			auto consoleIf = _emu->GetConsole();
 			_console = consoleIf;
 
-			// Disable frame blending for libretro - we want raw frames
-			// Post-processing should happen in the frontend
 			ConsoleType type = _console->GetConsoleType();
 			switch(type) {
 				case ConsoleType::Snes: {
 					SnesConfig cfg = _emu->GetSettings()->GetSnesConfig();
 					cfg.HighResBlendMode = SnesHighResBlendMode::None;
 					_emu->GetSettings()->SetSnesConfig(cfg);
-					break;
-				}
-				case ConsoleType::Gameboy: {
-					GameboyConfig cfg = _emu->GetSettings()->GetGameboyConfig();
-					cfg.BlendFrames = false;
-					_emu->GetSettings()->SetGameboyConfig(cfg);
-					break;
-				}
-				case ConsoleType::Gba: {
-					GbaConfig cfg = _emu->GetSettings()->GetGbaConfig();
-					cfg.BlendFrames = false;
-					_emu->GetSettings()->SetGbaConfig(cfg);
-					break;
-				}
-				case ConsoleType::Sms: {
-					SmsConfig cfg = _emu->GetSettings()->GetSmsConfig();
-					cfg.GgBlendFrames = false;
-					_emu->GetSettings()->SetSmsConfig(cfg);
 					break;
 				}
 				case ConsoleType::PcEngine: {
@@ -2503,6 +2822,7 @@ void libretro_probe_inputs(const char* tag)
 				AudioConfig audioCfg = _emu->GetSettings()->GetAudioConfig();
 				audioCfg.EnableAudio = true;
 				audioCfg.MasterVolume = 100;
+				audioCfg.SampleRate = _audioSampleRate;
 				_emu->GetSettings()->SetAudioConfig(audioCfg);
 				
 				NesConfig nesCfg = _emu->GetSettings()->GetNesConfig();
@@ -2511,10 +2831,8 @@ void libretro_probe_inputs(const char* tag)
 					if(nesCfg.ChannelVolumes[i] == 0) {
 						nesCfg.ChannelVolumes[i] = 100;
 					}
-					// Initialize panning to center (50) if zero
-					if(nesCfg.ChannelPanning[i] == 0) {
-						nesCfg.ChannelPanning[i] = 50;
-					}
+					// NES channel panning uses 0 as the centered position.
+					nesCfg.ChannelPanning[i] = 0;
 				}
 				_emu->GetSettings()->SetNesConfig(nesCfg);
 			}
@@ -2533,8 +2851,8 @@ void libretro_probe_inputs(const char* tag)
 
 			// Compute a safe save state size to report to the frontend
 			std::stringstream ss;
-			_emu->GetSaveStateManager()->SaveState(ss);
-			_saveStateSize = ((ss.str().size() * 2) + 0x400) & ~0x3FF;
+			_emu->Serialize(ss, true, 0);
+			_saveStateSize = ((ss.str().size() + 0x400) & ~0x3FF);
 
 			// Update memory maps (still a stubbed implementation for now)
 			retro_set_memory_maps();
@@ -2825,6 +3143,7 @@ void libretro_probe_inputs(const char* tag)
 				_keyManager->SetConsole(nullptr);
 			}
 		}
+		_videoFilter.reset();
 	}
 
 	RETRO_API unsigned retro_get_region()
@@ -2960,46 +3279,34 @@ void libretro_probe_inputs(const char* tag)
 			fps = _console->GetFps();
 		}
 		info->timing.fps = fps;
-		info->timing.sample_rate = 44100.0;
+		info->timing.sample_rate = (double)_audioSampleRate;
 	}
 
 	RETRO_API void *retro_get_memory_data(unsigned id)
 	{
+		if(id == RETRO_MEMORY_SAVE_RAM) {
+			return GetLibretroSaveRam().Memory;
+		}
+
 		// Memory access is NES-specific for now
-		if(!_console || _console->GetConsoleType() != ConsoleType::Nes) {
+		if(id != RETRO_MEMORY_SYSTEM_RAM || !_console || _console->GetConsoleType() != ConsoleType::Nes) {
 			return nullptr;
 		}
 		
 		auto nesConsole = std::dynamic_pointer_cast<NesConsole>(_console);
 		if(!nesConsole) return nullptr;
 		
-		BaseMapper* mapper = nesConsole->GetMapper();
-		switch(id) {
-			case RETRO_MEMORY_SAVE_RAM:
-				// Save-ram accessor moved/hidden in BaseMapper; return nullptr until mapped to new API.
-				(void)mapper;
-				return nullptr;
-			case RETRO_MEMORY_SYSTEM_RAM:
-				// Use the renamed GetInternalRam() if available on NesMemoryManager.
-				if(nesConsole->GetMemoryManager()) {
-					return nesConsole->GetMemoryManager()->GetInternalRam();
-				}
-				return nullptr;
+		// Use the renamed GetInternalRam() if available on NesMemoryManager.
+		if(nesConsole->GetMemoryManager()) {
+			return nesConsole->GetMemoryManager()->GetInternalRam();
 		}
 		return nullptr;
 	}
 
 	RETRO_API size_t retro_get_memory_size(unsigned id)
 	{
-		switch(id) {
-			case RETRO_MEMORY_SAVE_RAM: //return mapper->GetMemorySize(DebugMemoryType::SaveRam);
-			   // Mapper API changed; save-RAM access moved. Return 0 for now.
-            // TODO: replace with mapper->GetSaveRam() equivalent when API is available.
-            return 0;
-			case RETRO_MEMORY_SYSTEM_RAM: //return MemoryManager::InternalRAMSize;
-            // Memory manager API renamed to GetInternalRam()
-            // Use the new method if available; otherwise return 0.
-            return 0;		
+		if(id == RETRO_MEMORY_SAVE_RAM) {
+			return GetLibretroSaveRam().Size;
 		}
 		return 0;
 	}
