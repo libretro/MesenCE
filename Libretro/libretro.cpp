@@ -83,6 +83,8 @@ static string _mesenVersion = "";
 static int32_t _saveStateSize = -1;
 static bool _shiftButtonsClockwise = false;
 static int32_t _audioSampleRate = 44100;
+static bool _sortSavesBySystem = false;
+static bool _sortSavesInitialized = false;
 
 //Include game database as a byte array (representing the MesenDB.txt file)
 #include "MesenDB.inc"
@@ -371,6 +373,7 @@ static constexpr const char* MesenOverscanBottom = "mesen_overscan_down";
 //static constexpr const char* MesenAspectRatio = "mesen_aspect_ratio";
 static constexpr const char* MesenRegion = "mesen_region";
 static constexpr const char* MesenRamState = "mesen_ramstate";
+static constexpr const char* MesenSortSavesBySystem = "mesen_sort_saves_by_system";
 static constexpr const char* MesenControllerTurboSpeed = "mesen_controllerturbospeed";
 static constexpr const char* MesenFdsAutoSelectDisk = "mesen_fdsautoinsertdisk";
 static constexpr const char* MesenFdsFastForwardLoad = "mesen_fdsfastforwardload";
@@ -458,6 +461,33 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		return ConsoleType::Nes;
 	}
 
+	static string GetSaveSubfolderForGamePath(const string& gamePath)
+	{
+		string extension = FolderUtilities::GetExtension(gamePath);
+		if(extension == ".nes" || extension == ".fds" || extension == ".unf" || extension == ".unif") {
+			return "Mesen2-NES";
+		}
+		if(extension == ".sfc" || extension == ".smc") {
+			return "Mesen2-SNES";
+		}
+		if(extension == ".gb" || extension == ".gbc" || extension == ".gbx") {
+			return "Mesen2-Gameboy";
+		}
+		if(extension == ".gba") {
+			return "Mesen2-GBA";
+		}
+		if(extension == ".pce" || extension == ".sgx" || extension == ".cue" || extension == ".hes") {
+			return "Mesen2-PCEngine";
+		}
+		if(extension == ".sms" || extension == ".gg") {
+			return "Mesen2-SMS";
+		}
+		if(extension == ".ws" || extension == ".wsc") {
+			return "Mesen2-Wonderswan";
+		}
+		return "Mesen2";
+	}
+
 	static bool IsOptionVisibleForCurrentConsole(const char* key)
 	{
 		if(!key) {
@@ -467,6 +497,10 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		auto matches = [key](const char* option) {
 			return std::strcmp(key, option) == 0;
 		};
+
+		if(matches(MesenSortSavesBySystem)) {
+			return true;
+		}
 
 		if(consoleType == ConsoleType::Nes) {
 			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
@@ -539,7 +573,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		static const char* keys[] = {
-			MesenRegion, MesenRamState, MesenOverclock, MesenOverclockType,
+			MesenRegion, MesenRamState, MesenSortSavesBySystem, MesenOverclock, MesenOverclockType,
 			MesenFdsAutoSelectDisk, MesenFdsFastForwardLoad,
 			MesenAllowInvalidInput, MesenRandomizeMapperPowerOnState, MesenRandomizeCpuPpuAlignment,
 			MesenPalette, MesenNtscFilter, MesenOverscanLeft, MesenOverscanRight,
@@ -591,6 +625,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 	RETRO_API void retro_init()
 	{
+		_sortSavesInitialized = false;
+		_sortSavesBySystem = false;
 		_audioSampleRate = 44100;
 
 		struct retro_log_callback log;
@@ -712,6 +748,9 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenRamState, "System - RAM Power-On State (restart required)", "RAM Power-On State", "Default power-on state for RAM", NULL, "system",
 				{{ "All 0s (Default)", "All 0s" }, { "All 1s", "All 1s" }, { "Random Values", "Random" }, { NULL, NULL }},
 				"All 0s (Default)" },
+			{ MesenSortSavesBySystem, "System - Sort Saves by System", "Sort Saves by System", "Store saves in system-specific subfolders. Restart the core for changes to take effect; existing saves are not moved.", NULL, "system",
+				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
+				"disabled" },
 			{ MesenOverclock, "System - Overclock", "Overclock", "Overclock the NES CPU", NULL, "system",
 				{{ "None", "None" }, { "Low", "Low" }, { "Medium", "Medium" }, { "High", "High" }, { "Very High", "Very High" }, { NULL, NULL }},
 				"None" },
@@ -2569,12 +2608,12 @@ void libretro_probe_inputs(const char* tag)
 	{
 		_videoFilter.reset();
 		logSgbDebugf("retro_load_game called: path=%s", game && game->path ? game->path : "(null)");
-		char *saveFolder;
-		char *systemFolder;
+		char *saveFolder = nullptr;
+		char *systemFolder = nullptr;
 		if(!env_cb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &systemFolder) || !systemFolder)
 			return false;
 
-		if(!env_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &saveFolder)) {
+		if(!env_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &saveFolder) || !saveFolder) {
 			logMessage(RETRO_LOG_ERROR, "Could not find save directory.\n");
 		}
 
@@ -2584,25 +2623,6 @@ void libretro_probe_inputs(const char* tag)
 			return false;
 		}
 
-		//Expect the following structure:
-		// /system/disksys.rom
-		// /system/HdPacks/*
-		// /system/<BIOS files>
-		// /saves/*.sav
-		FolderUtilities::SetHomeFolder(systemFolder);
-		// SetFolderOverrides signature expects 4 strings (save, savestate, screenshot, firmware).
-		// Point firmware lookups at the system directory root.
-		FolderUtilities::SetFolderOverrides(saveFolder, std::string(""), std::string(""), string(systemFolder));
-		update_settings();
-
-		// Controller/Settings API changed; skip initial controller setup here
-		//Plug in 2 standard controllers by default, game database will switch the controller types for recognized games
-/*		_console->GetSettings()->SetMasterVolume(10.0);
-		_console->GetSettings()->SetControllerType(0, ControllerType::StandardController);
-		_console->GetSettings()->SetControllerType(1, ControllerType::StandardController);
-		_console->GetSettings()->SetControllerType(2, ControllerType::None);
-		_console->GetSettings()->SetControllerType(3, ControllerType::None);
-*/
 		// Attempt to fetch extended game info
 		const struct retro_game_info_ext *gameExt = NULL;
 		const void *gameData = NULL;
@@ -2637,6 +2657,37 @@ void libretro_probe_inputs(const char* tag)
 			// struct
 			gamePath = game->path;
 		}
+
+		// Expect the following structure:
+		// /system/disksys.rom
+		// /system/HdPacks/*
+		// /system/<BIOS files>
+		// /saves/<save files> (or /saves/Mesen2-*/<save files> when sorted)
+		if(_emu->GetConsole()) {
+			logMessage(RETRO_LOG_ERROR, "Cannot load content while another game is loaded.\n");
+			return false;
+		}
+		FolderUtilities::SetHomeFolder(systemFolder);
+		string saveFolderOverride = saveFolder ? string(saveFolder) : string();
+		if(!_sortSavesInitialized) {
+			retro_variable sortSaves = {};
+			_sortSavesBySystem = readVariable(MesenSortSavesBySystem, sortSaves) && std::strcmp(sortSaves.value, "enabled") == 0;
+			_sortSavesInitialized = true;
+		}
+		if(!saveFolderOverride.empty() && _sortSavesBySystem) {
+			saveFolderOverride = FolderUtilities::CombinePath(saveFolderOverride, GetSaveSubfolderForGamePath(gamePath));
+		}
+		FolderUtilities::SetFolderOverrides(saveFolderOverride, std::string(""), std::string(""), string(systemFolder));
+		update_settings();
+
+		// Controller/Settings API changed; skip initial controller setup here
+		//Plug in 2 standard controllers by default, game database will switch the controller types for recognized games
+/*		_console->GetSettings()->SetMasterVolume(10.0);
+		_console->GetSettings()->SetControllerType(0, ControllerType::StandardController);
+		_console->GetSettings()->SetControllerType(1, ControllerType::StandardController);
+		_console->GetSettings()->SetControllerType(2, ControllerType::None);
+		_console->GetSettings()->SetControllerType(3, ControllerType::None);
+*/
 
 /*		// Load content
 		VirtualFile romData(gameData, gameSize, gamePath);
@@ -3085,6 +3136,13 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API void retro_unload_game()
 	{
+		if(_emu && _emu->GetConsole()) {
+			_emu->Stop(false, true);
+			_console.reset();
+			if(_keyManager) {
+				_keyManager->SetConsole(nullptr);
+			}
+		}
 		_videoFilter.reset();
 	}
 
