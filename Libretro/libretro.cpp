@@ -81,6 +81,8 @@ static string _mesenVersion = "";
 static int32_t _saveStateSize = -1;
 static bool _shiftButtonsClockwise = false;
 static int32_t _audioSampleRate = 44100;
+static bool _sortSavesBySystem = false;
+static bool _sortSavesInitialized = false;
 
 //Include game database as a byte array (representing the MesenDB.txt file)
 #include "MesenDB.inc"
@@ -320,6 +322,7 @@ static constexpr const char* MesenOverclockType = "mesen_overclock_type";
 //static constexpr const char* MesenAspectRatio = "mesen_aspect_ratio";
 static constexpr const char* MesenRegion = "mesen_region";
 static constexpr const char* MesenRamState = "mesen_ramstate";
+static constexpr const char* MesenSortSavesBySystem = "mesen_sort_saves_by_system";
 static constexpr const char* MesenControllerTurboSpeed = "mesen_controllerturbospeed";
 static constexpr const char* MesenFdsAutoSelectDisk = "mesen_fdsautoinsertdisk";
 static constexpr const char* MesenFdsFastForwardLoad = "mesen_fdsfastforwardload";
@@ -444,6 +447,10 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			return std::strcmp(key, option) == 0;
 		};
 
+		if(matches(MesenSortSavesBySystem)) {
+			return true;
+		}
+
 		if(consoleType == ConsoleType::Nes) {
 			return matches(MesenRegion) || matches(MesenRamState) || matches(MesenOverclock) || matches(MesenOverclockType) ||
 				matches(MesenFdsAutoSelectDisk) || matches(MesenFdsFastForwardLoad) || matches(MesenAllowInvalidInput) ||
@@ -529,7 +536,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 		}
 
 		static const char* keys[] = {
-			MesenRegion, MesenRamState, MesenOverclock, MesenOverclockType,
+			MesenRegion, MesenRamState, MesenSortSavesBySystem, MesenOverclock, MesenOverclockType,
 			MesenFdsAutoSelectDisk, MesenFdsFastForwardLoad,
 			MesenAllowInvalidInput, MesenRandomizeMapperPowerOnState, MesenRandomizeCpuPpuAlignment,
 			MesenPalette, MesenNtscFilter, MesenEnablePalBorders,
@@ -580,6 +587,8 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 	RETRO_API void retro_init()
 	{
+		_sortSavesInitialized = false;
+		_sortSavesBySystem = false;
 		struct retro_log_callback log;
 		if(env_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log)) {
 			logCallback = log.log;
@@ -696,6 +705,9 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 			{ MesenRamState, "System - RAM Power-On State", "RAM Power-On State", "Default power-on state for RAM", NULL, "system",
 				{{ "All 0s (Default)", "All 0s" }, { "All 1s", "All 1s" }, { "Random Values", "Random" }, { NULL, NULL }},
 				"All 0s (Default)" },
+			{ MesenSortSavesBySystem, "System - Sort Saves by System", "Sort Saves by System", "Store saves in system-specific subfolders. Restart the core for changes to take effect; existing saves are not moved.", NULL, "system",
+				{{ "disabled", "Off" }, { "enabled", "On" }, { NULL, NULL }},
+				"disabled" },
 			{ MesenOverclock, "System - Overclock", "Overclock", "Overclock the NES CPU", NULL, "system",
 				{{ "None", "None" }, { "Low", "Low" }, { "Medium", "Medium" }, { "High", "High" }, { "Very High", "Very High" }, { NULL, NULL }},
 				"None" },
@@ -2311,14 +2323,21 @@ void libretro_probe_inputs(const char* tag)
 		// /system/disksys.rom
 		// /system/HdPacks/*
 		// /system/<BIOS files>
-		// /saves/Mesen2-*/<save files>
+		// /saves/<save files> (or /saves/Mesen2-*/<save files> when sorted)
+		if(_emu->GetConsole()) {
+			logMessage(RETRO_LOG_ERROR, "Cannot load content while another game is loaded.\n");
+			return false;
+		}
 		FolderUtilities::SetHomeFolder(systemFolder);
 		string saveFolderOverride = saveFolder ? string(saveFolder) : string();
-		if(!saveFolderOverride.empty()) {
+		if(!_sortSavesInitialized) {
+			retro_variable sortSaves = {};
+			_sortSavesBySystem = readVariable(MesenSortSavesBySystem, sortSaves) && std::strcmp(sortSaves.value, "enabled") == 0;
+			_sortSavesInitialized = true;
+		}
+		if(!saveFolderOverride.empty() && _sortSavesBySystem) {
 			saveFolderOverride = FolderUtilities::CombinePath(saveFolderOverride, GetSaveSubfolderForGamePath(gamePath));
 		}
-		// Keep configs/firmware rooted in the shared system directory, but restore
-		// per-subcore save separation by overriding only the save folder.
 		FolderUtilities::SetFolderOverrides(saveFolderOverride, std::string(""), std::string(""), string(systemFolder));
 		update_settings();
 
@@ -2799,6 +2818,13 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API void retro_unload_game()
 	{
+		if(_emu && _emu->GetConsole()) {
+			_emu->Stop(false, true);
+			_console.reset();
+			if(_keyManager) {
+				_keyManager->SetConsole(nullptr);
+			}
+		}
 	}
 
 	RETRO_API unsigned retro_get_region()
