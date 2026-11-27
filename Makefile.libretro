@@ -7,6 +7,8 @@ MESENFLAGS=
 #included before any of the toolchain-dependent variables below are evaluated
 ifeq ($(platform),libnx)
 	include $(DEVKITPRO)/libnx/switch_rules
+else ifeq ($(platform),libounce)
+	include $(DEVKITPRO)/libounce/switch2_rules
 endif
 
 CXX ?= g++
@@ -44,6 +46,20 @@ ifeq ($(platform),libnx)
 	MESENFLAGS += -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 	MESENFLAGS += -ffunction-sections -fdata-sections -ftls-model=local-exec
 	MESENFLAGS += -I$(DEVKITPRO)/libnx/include -I$(DEVKITPRO)/portlibs/switch/include
+	HAVE_LTO := 0
+	STATICLINK := false
+	LINKCHECKUNRESOLVED :=
+else ifeq ($(platform),libounce)
+	MESENOS := libounce
+	NRONAME := mesen2_libretro_libounce.nro
+	ELFNAME := mesen2_libretro_libounce.elf
+	SONAME  := mesen2_libretro_libounce.nro
+	MESENFLAGS += -DSWITCH=1 -D__SWITCH__ -D__SWITCH2__ -DHAVE_LIBNX -D_LARGEFILE_SOURCE -std=gnu++17
+	MESENFLAGS += $(SWITCH2_SHARED_ARCH)
+	MESENFLAGS += -ffunction-sections -fdata-sections
+	MESENFLAGS += -I$(DEVKITPRO)/libounce/include
+	MESENFLAGS += -I$(DEVKITPRO)/portlibs/switch2/include
+	MESENFLAGS += -I$(DEVKITPRO)/portlibs/switch/include
 	HAVE_LTO := 0
 	STATICLINK := false
 	LINKCHECKUNRESOLVED :=
@@ -188,6 +204,14 @@ all: libretro
 ifeq ($(platform),libnx)
 libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
 	$(AR) rcs $(STATICLIB) $^
+else ifeq ($(platform),libounce)
+libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
+	$(CXX) -specs=$(SWITCH2_SHARED_SPECS) $(SWITCH2_SHARED_ARCH) $(SWITCH2_SHARED_LIBPATHS) \
+	    -L$(DEVKITPRO)/portlibs/switch2/lib -L$(DEVKITPRO)/portlibs/switch/lib \
+	    -Wl,--gc-sections -shared -Wl,-soname,$(SONAME) \
+	    -o $(ELFNAME) $^ \
+	    -lEGL -lGLESv2 -lglapi -ldrm_nouveau -lounce -lm
+	elf2nro $(ELFNAME) $(NRONAME)
 else
 libretro: $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ)
 	$(CXX) $(CXXFLAGS) $(LINKOPTIONS) $(LINKCHECKUNRESOLVED) $(LDFLAGS) -shared -o $(SHAREDLIB) $(LIBRETROOBJ) $(SEVENZIPOBJ) $(LUAOBJ) $(UTILOBJ) $(COREOBJ) -pthread $(LIBS)
@@ -207,3 +231,4 @@ clean:
 	rm -f $(SHAREDLIB)
 	rm -f $(STATICLIB)
 	rm -f $(LIBRETROOBJ)
+	rm -f $(ELFNAME) $(NRONAME)
