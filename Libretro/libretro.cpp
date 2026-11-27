@@ -91,6 +91,7 @@ static std::unique_ptr<Emulator> _emu;
 // shared_ptr to the console (IConsole interface, may be null until emulator initialized)
 // Supports all console types: NES, SNES, Gameboy, GBA, PC Engine, SMS, Wonderswan
 static std::shared_ptr<IConsole> _console;
+static std::unique_ptr<BaseVideoFilter> _videoFilter;
 static std::vector<uint32_t> _videoFrameBuffer;
 
 static ConsoleMemoryInfo GetLibretroSaveRam()
@@ -656,6 +657,7 @@ uint32_t wavebeamPalette[0x40] { 0xFF6B6B6B, 0xFF001B88, 0xFF21009A, 0xFF40008C,
 
 	RETRO_API void retro_deinit()
 	{
+		_videoFilter.reset();
 		if(_keyManager) _keyManager->SetSupportsInputBitmasks(false);
 	// Unregister the key manager from the global KeyManager to avoid a
 	// dangling pointer during emulator shutdown. KeyManager::RegisterKeyManager
@@ -1170,6 +1172,7 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API void retro_reset()
 	{
+		_videoFilter.reset();
 		// Reset signature changed — call parameterless Reset if available
 		_console->Reset();
 	}
@@ -1272,6 +1275,7 @@ void libretro_probe_inputs(const char* tag)
 
 	void update_settings()
 	{
+		_videoFilter.reset();
 		struct retro_variable var = { };
 		NesConfig nesCfg = _emu->GetSettings()->GetNesConfig();
 		SnesConfig snesCfg = _emu->GetSettings()->GetSnesConfig();
@@ -1934,7 +1938,6 @@ void libretro_probe_inputs(const char* tag)
 			// Check that we have a valid buffer with meaningful size (each system allocates differently)
 			if(_videoRefresh && frame.FrameBuffer && frame.FrameBufferSize > 0) {
 				std::vector<uint32_t> rawFrameBuffer;
-				std::unique_ptr<BaseVideoFilter> filter;
 				uint32_t* src = nullptr;
 				FrameInfo outInfo = { frame.Width, frame.Height };
 				size_t pixels = 0;
@@ -1949,12 +1952,14 @@ void libretro_probe_inputs(const char* tag)
 					pixels = (size_t)outInfo.Width * outInfo.Height;
 					src = rawFrameBuffer.data();
 				} else {
-					// Create a temporary video filter (same pattern used by LuaApi)
-					filter.reset(_emu->GetVideoFilter());
+					if(!_videoFilter) {
+						_videoFilter.reset(_emu->GetVideoFilter());
+					}
 					FrameInfo baseSize = { frame.Width, frame.Height };
-					filter->SetBaseFrameInfo(baseSize);
-					outInfo = filter->SendFrame((uint16_t*)frame.FrameBuffer, _emu->GetFrameCount(), _emu->GetFrameCount() & 0x01, nullptr, true);
-					src = filter->GetOutputBuffer();
+					_videoFilter->SetBaseFrameInfo(baseSize);
+					RenderedFrame renderedFrame(frame.FrameBuffer, frame.Width, frame.Height, 1.0, frame.FrameCount);
+					outInfo = _videoFilter->SendFrame((uint16_t*)frame.FrameBuffer, frame.FrameCount, frame.FrameCount & 0x01, nullptr, true, renderedFrame);
+					src = _videoFilter->GetOutputBuffer();
 					pixels = (size_t)outInfo.Width * (size_t)outInfo.Height;
 				}
 
@@ -1968,7 +1973,7 @@ void libretro_probe_inputs(const char* tag)
 						outH = outInfo.Width;
 					}
 
-					// Keep callback data alive after the temporary video filter is destroyed.
+					// Keep callback data alive independently of the filter.
 					_videoFrameBuffer.resize((size_t)outW * outH);
 					if(_screenRotation == 180) {
 						for(size_t i = 0; i < pixels; ++i) {
@@ -2055,6 +2060,9 @@ void libretro_probe_inputs(const char* tag)
 			std::string in((const char*)data, size);
 			std::stringstream ss(in);
 			auto res = _emu->Deserialize(ss, SaveStateManager::FileFormatVersion, true);
+			if(res == DeserializeResult::Success) {
+				_videoFilter.reset();
+			}
 			return (res == DeserializeResult::Success);
 		} catch(...) {
 			return false;
@@ -2559,6 +2567,7 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API bool retro_load_game(const struct retro_game_info *game)
 	{
+		_videoFilter.reset();
 		logSgbDebugf("retro_load_game called: path=%s", game && game->path ? game->path : "(null)");
 		char *saveFolder;
 		char *systemFolder;
@@ -2719,32 +2728,12 @@ void libretro_probe_inputs(const char* tag)
 			auto consoleIf = _emu->GetConsole();
 			_console = consoleIf;
 
-			// Disable frame blending for libretro - we want raw frames
-			// Post-processing should happen in the frontend
 			ConsoleType type = _console->GetConsoleType();
 			switch(type) {
 				case ConsoleType::Snes: {
 					SnesConfig cfg = _emu->GetSettings()->GetSnesConfig();
 					cfg.HighResBlendMode = SnesHighResBlendMode::None;
 					_emu->GetSettings()->SetSnesConfig(cfg);
-					break;
-				}
-				case ConsoleType::Gameboy: {
-					GameboyConfig cfg = _emu->GetSettings()->GetGameboyConfig();
-					cfg.BlendFrames = false;
-					_emu->GetSettings()->SetGameboyConfig(cfg);
-					break;
-				}
-				case ConsoleType::Gba: {
-					GbaConfig cfg = _emu->GetSettings()->GetGbaConfig();
-					cfg.BlendFrames = false;
-					_emu->GetSettings()->SetGbaConfig(cfg);
-					break;
-				}
-				case ConsoleType::Sms: {
-					SmsConfig cfg = _emu->GetSettings()->GetSmsConfig();
-					cfg.GgBlendFrames = false;
-					_emu->GetSettings()->SetSmsConfig(cfg);
 					break;
 				}
 				case ConsoleType::PcEngine: {
@@ -3096,6 +3085,7 @@ void libretro_probe_inputs(const char* tag)
 
 	RETRO_API void retro_unload_game()
 	{
+		_videoFilter.reset();
 	}
 
 	RETRO_API unsigned retro_get_region()
